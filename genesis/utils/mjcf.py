@@ -1,5 +1,6 @@
 import os
 import xml.etree.ElementTree as ET
+from typing_extensions import Mapping, Tuple, Optional
 from pathlib import Path
 from itertools import chain
 from bisect import bisect_right
@@ -217,13 +218,13 @@ def build_model(
                 mj.eq_solref[:, 0] = MIN_TIMECONST
     elif isinstance(xml, mujoco.MjModel):
         mj = xml
-    else:
+        else:
         gs.raise_exception(f"'{xml}' is not a valid MJCF or URDF file.")
 
     return mj
 
 
-def parse_xml(morph, surface, rigid_options=None):
+def parse_xml(morph, surface, mj_model: Optional[mujoco.MjModel] = None, rigid_options=None):
     # Always merge fixed links unless explicitly asked not to do so
     merge_fixed_links, links_to_keep = False, ()
     if isinstance(morph, (gs.morphs.URDF, gs.morphs.Drone)):
@@ -235,7 +236,7 @@ def parse_xml(morph, surface, rigid_options=None):
     # the expanded model is only ever read by the parsers.
     exclude_ground_plane = isinstance(morph, gs.morphs.MJCF) and morph.exclude_ground_plane
     file = uu.load_xacro(morph.file, morph.xacro_args) if morph.is_format(XACRO_FORMAT) else morph.file
-    mj = build_model(
+    mj = mj_model if mj_model else build_model(
         file,
         not morph.visualization,
         merge_fixed_links,
@@ -283,6 +284,9 @@ def parse_xml(morph, surface, rigid_options=None):
 
     return l_infos, links_j_infos, links_g_infos, eqs_info
 
+def parse_mjcf_str(xml_str) -> mujoco.MjModel:
+    mj = mujoco.MjModel.from_xml_string(xml_str)
+    return mj
 
 def parse_link(mj, i_l, scale):
     # mj.body
