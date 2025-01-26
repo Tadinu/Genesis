@@ -1,5 +1,7 @@
+
 from itertools import chain
 from typing import TYPE_CHECKING
+import mujoco as mj
 
 import numpy as np
 import torch
