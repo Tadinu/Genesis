@@ -2,6 +2,7 @@ import inspect
 from functools import wraps
 from itertools import chain
 from typing import TYPE_CHECKING, Hashable
+import mujoco as mj
 
 import numpy as np
 import torch
