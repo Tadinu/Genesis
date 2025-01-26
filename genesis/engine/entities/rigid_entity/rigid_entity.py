@@ -1,6 +1,7 @@
 from copy import copy
 from itertools import chain
 from typing import TYPE_CHECKING, Literal
+import mujoco
 
 import gstaichi as ti
 import numpy as np
@@ -102,6 +103,8 @@ class RigidEntity(Entity):
 
         if isinstance(self._morph, gs.morphs.Mesh):
             self._load_mesh(self._morph, self._surface)
+        elif isinstance(self._morph, gs.morphs.MuJoCoMorph):
+            self._load_scene(self._morph, self._surface, self._morph.model)
         elif isinstance(self._morph, (gs.morphs.MJCF, gs.morphs.URDF, gs.morphs.Drone)):
             self._load_scene(self._morph, self._surface)
         elif isinstance(self._morph, gs.morphs.Primitive):
@@ -334,14 +337,14 @@ class RigidEntity(Entity):
             surface=surface,
         )
 
-    def _load_scene(self, morph, surface):
+    def _load_scene(self, morph, surface, mj_model: Optional[mujoco.MjModel] = None):
         # Mujoco's unified MJCF+URDF parser is not good enough for now to be used for loading both MJCF and URDF files.
         # First, it would happen when loading visual meshes having supported format (i.e. Collada files '.dae').
         # Second, it does not take into account URDF 'mimic' joint constraints. However, it does a better job at
         # initialized undetermined physics parameters.
-        if isinstance(morph, gs.morphs.MJCF):
+        if isinstance(morph, gs.morphs.MJCF) or isistance(morph, gs.morphs.MuJoCoMorph):
             # Mujoco's unified MJCF+URDF parser systematically for MJCF files
-            l_infos, links_j_infos, links_g_infos, eqs_info = mju.parse_xml(morph, surface)
+            l_infos, links_j_infos, links_g_infos, eqs_info = mju.parse_xml(morph, surface, mj_model)
         else:
             # Custom "legacy" URDF parser for loading geometries (visual and collision) and equality constraints.
             # This is necessary because Mujoco cannot parse visual geometries (meshes) reliably for URDF.

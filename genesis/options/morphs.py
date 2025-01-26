@@ -8,6 +8,7 @@ rigid object / MPM object / FEM object.
 import os
 from typing import Any, List, Optional, Sequence, Tuple, Union
 
+import mujoco
 import numpy as np
 
 import genesis as gs
@@ -696,7 +697,6 @@ class MeshSet(Mesh):
 
 ############################ Rigid & Articulated ############################
 
-
 class MJCF(FileMorph):
     """
     Morph loaded from a MJCF file. This morph only supports `RigidEntity`
@@ -810,6 +810,19 @@ class MJCF(FileMorph):
                 gs.raise_exception("Anisotropic scaling is not supported by MJCF morph.")
             self.scale = self.scale.mean()
 
+class MuJoCoMorph(MJCF):
+    xml: Optional[str] = None
+    model: Optional[Any] = None
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.model:
+            if not self.file and not self.xml:
+                gs.raise_exception(f"[MuJocoMorph] Either file or xml is expected")
+            elif self.file and not self.path.endswith(".xml") and not self.path.endswith(".mjcf"):
+                gs.raise_exception(f"Expected `.xml` extension for file: {self.file}")
+
+            self.model = mujoco.MjModel.from_xml_path(self.file) if self.file else \
+                         mujoco.MjModel.from_xml_string(self.xml)
 
 class URDF(FileMorph):
     """

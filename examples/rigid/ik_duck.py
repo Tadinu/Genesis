@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 
 import genesis as gs
+from genesis import quat_to_xyz, xyz_to_quat
 
 
 def main():
@@ -53,14 +54,33 @@ def main():
 
     ########################## build ##########################
     scene.build()
+    kinematics_mode = False
+    if not kinematics_mode:
+        # set positional gains
+        robot.set_dofs_kp(
+            kp=np.array([4500, 4500, 3500, 3500, 2000, 2000]),
+            dofs_idx_local=np.arange(6),
+        )
+        # set velocity gains
+        robot.set_dofs_kv(
+            kv=np.array([450, 450, 350, 350, 200, 200]),
+            dofs_idx_local=np.arange(6),
+        )
+        # set force range for safety
+        robot.set_dofs_force_range(
+            lower=np.array([-87, -87, -87, -87, -87, -87]),
+            upper=np.array([87, 87, 87, 87, 87, 87]),
+            dofs_idx_local=np.arange(6),
+        )
 
-    target_quat = np.array([0, 1, 0, 0])  # pointing downwards
+    #target_quat = np.array([0, 1, 0, 0])  # pointing downwards
     center = np.array([0.4, -0.2, 0.25])
     r = 0.1
     ee_link = robot.links[0]
 
     for i in range(0, 2000):
         target_pos = center + np.array([np.cos(i / 360 * np.pi), np.sin(i / 360 * np.pi), 0]) * r
+        target_quat = xyz_to_quat(np.array([i / 360 * np.pi] * 3), rpy=True, degrees=True)
 
         target_entity.set_qpos(np.concatenate([target_pos, target_quat]))
         q = robot.inverse_kinematics(
@@ -73,7 +93,15 @@ def main():
 
         # Note that this IK example is only for visualizing the solved q, so here we do not call scene.step(), but only update the state and the visualizer
         # In actual control applications, you should instead use robot.control_dofs_position() and scene.step()
-        robot.set_qpos(q)
+        if kinematics_mode:
+            robot.set_qpos(q)
+        else:
+            assert robot.n_dofs == 6
+            ctrl = np.empty(6)
+            ctrl[:3] = q[:3].cpu().numpy()
+            ctrl[3:] = quat_to_xyz(q[3:].cpu().numpy())
+            robot.control_dofs_position(ctrl, np.arange(robot.n_dofs))
+            scene.step()
         scene.visualizer.update()
 
 

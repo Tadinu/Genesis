@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import contextlib
 from pathlib import Path
 from itertools import chain
+from typing_extensions import Mapping, Tuple, Optional
 from bisect import bisect_right
 import io
 
@@ -149,13 +150,13 @@ def build_model(xml, discard_visual, default_armature=None, merge_fixed_links=Fa
                     mj.dof_invweight0[:] = 0.0
     elif isinstance(xml, mujoco.MjModel):
         mj = xml
-    else:
+        else:
         raise gs.raise_exception(f"'{xml}' is not a valid MJCF file.")
 
     return mj
 
 
-def parse_xml(morph, surface):
+def parse_xml(morph, surface, mj_model: Optional[mujoco.MjModel] = None):
     # Always merge fixed links unless explicitly asked not to do so
     merge_fixed_links, links_to_keep = False, ()
     if isinstance(morph, (gs.morphs.URDF, gs.morphs.Drone)):
@@ -163,7 +164,7 @@ def parse_xml(morph, surface):
         links_to_keep = morph.links_to_keep
 
     # Build model from XML (either URDF or MJCF)
-    mj = build_model(morph.file, not morph.visualization, morph.default_armature, merge_fixed_links, links_to_keep)
+    mj = mj_model if mj_model else build_model(morph.file, not morph.visualization, morph.default_armature, merge_fixed_links, links_to_keep)
 
     # We have another more informative warning later so we suppress this one
     # gs.logger.warning(f"(MJCF) Approximating tendon by joint actuator for `{j_info['name']}`")
@@ -184,6 +185,9 @@ def parse_xml(morph, surface):
 
     return l_infos, links_j_infos, links_g_infos, eqs_info
 
+def parse_mjcf_str(xml_str) -> mujoco.MjModel:
+    mj = mujoco.MjModel.from_xml_string(xml_str)
+    return mj
 
 def parse_link(mj, i_l, scale):
     # mj.body
