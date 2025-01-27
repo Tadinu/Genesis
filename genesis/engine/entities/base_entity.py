@@ -24,6 +24,7 @@ class Entity(RBC):
         material,
         surface,
     ):
+        self._name: str = ""
         self._uid = gs.UID()
         self._idx = idx
         self._scene: "Scene" = scene
@@ -34,12 +35,21 @@ class Entity(RBC):
         self._sim = scene.sim
 
         gs.logger.info(
-            f"Adding ~<{self._repr_type()}>~. idx: ~<{self._idx}>~, uid: ~~~<{self._uid}>~~~, morph: ~<{morph}>~, material: ~<{self._material}>~."
+            f"Adding ~<{self._repr_type()}>~. idx: ~<{self._idx}>~, uid: ~~~<{self._uid}>~~~, name: ~<{self._name}>~, "
+            f"morph: ~<{morph}>~, material: ~<{self._material}>~."
         )
 
     # ------------------------------------------------------------------------------------
     # ----------------------------------- properties -------------------------------------
     # ------------------------------------------------------------------------------------
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
 
     @property
     def uid(self):
