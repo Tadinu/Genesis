@@ -66,11 +66,20 @@ class Entity(RBC):
 
         gs.logger.info(
             f"Adding ~<{self.__repr_name__()}>~. idx: ~<{self._idx}>~, uid: ~~~<{self._uid}>~~~, morph: ~<{morph}>~, material: ~<{self._material}>~."
+            f"morph: ~<{morph}>~, material: ~<{self._material}>~."
         )
 
     # ------------------------------------------------------------------------------------
     # ----------------------------------- properties -------------------------------------
     # ------------------------------------------------------------------------------------
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
 
     @property
     def uid(self):

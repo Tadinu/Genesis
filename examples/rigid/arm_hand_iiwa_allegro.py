@@ -1,35 +1,33 @@
 import argparse
 from pathlib import Path
 import os
-import pathlib
 from typing_extensions import Optional
 
 import numpy as np
-
 import mujoco as mj
-from mujoco import mj_saveModel, mj_saveLastXML
 from loop_rate_limiters import RateLimiter
 
-import mink
 import genesis as gs
+from genesis.planner import mink
+from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 
 _HERE = Path(__file__).parent
 _ARM_XML = _HERE / "kuka_iiwa_14" / "scene.xml"
 _HAND_XML = _HERE / "wonik_allegro" / "left_hand.xml"
 _IIWA14_ALLEGRO_XML = _HERE / "kuka_iiwa_14_allegro" / "iiwa14_left_hand.xml"
 
-fingers = ["rf_tip", "mf_tip", "ff_tip", "th_tip"]
+ATTACH_PREFIX = "allegro_left/"
+HAND_BASE = "hand_base"
+PALM = f"{ATTACH_PREFIX}palm"
+BALL = "ball"
+
+hand_fingertip_names = ["rf_tip", "mf_tip", "ff_tip", "th_tip"]
+fingertip_names = [f"{ATTACH_PREFIX}{ftip}" for ftip in hand_fingertip_names]
 finger_colors = {
-    fingers[0]: [0.9, 0, 0, 1], # Red
-    fingers[1]: [0, 0.9, 0, 1], # Green
-    fingers[2]: [0, 0, 0.9, 1], # Blue
-    fingers[3]: [0.9, 0.9, 0.9, 1] # White
-}
-sites = {
-    fingers[0]: "ball_s1",
-    fingers[1]: "ball_s2",
-    fingers[2]: "ball_s3",
-    fingers[3]: "ball_s4"
+    fingertip_names[0]: [0.9, 0, 0, 1], # Red
+    fingertip_names[1]: [0, 0.9, 0, 1], # Green
+    fingertip_names[2]: [0, 0, 0.9, 1], # Blue
+    fingertip_names[3]: [0.9, 0.9, 0.9, 1] # White
 }
 
 # fmt: off
@@ -44,9 +42,10 @@ HOME_QPOS = [
 ]
 # fmt: on
 
-arm_dof = 7
-palm_dof = 16
+ARM_DOF = 7
+PALM_DOF = 16
 def construct_robot():
+    # https://github.com/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
     arm_spec = mj.MjSpec.from_file(_ARM_XML.as_posix())
 
     hand_spec = mj.MjSpec.from_file(_HAND_XML.as_posix())
@@ -54,26 +53,27 @@ def construct_robot():
     palm.quat = (1, 0, 0, 0)
     palm.pos = (0, 0, 0.095)
 
-    site = arm_spec.find_site("attachment_site")
-    site.attach(hand_spec, "allegro_left/")
+    # Add fingertip-end bodies from sites (since Genesis does not build site info from MJ model)
+    for fingertip in hand_fingertip_names:
+        fingertip_site = hand_spec.find_site(fingertip)
+        hand_spec.find_body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
+                                                quat=fingertip_site.quat)
+
+    # Attach [hand_spec] to [arm_spec]
+    attach_site = arm_spec.find_site("attachment_site")
+    attach_site.attach(hand_spec, ATTACH_PREFIX)
 
     # TODO: Remove prev "home" key from arm_spec once MuJoCo releases [rem_key] API
     arm_spec.add_key(name="home2", qpos=HOME_QPOS)
 
-    for finger in fingers:
-        body = arm_spec.worldbody.add_body(name=f"{finger}_target", mocap=True)
-        body.add_geom(
-            type=mj.mjtGeom.mjGEOM_SPHERE,
-            size=[.02,.02,.02],
-            contype=0,
-            conaffinity=0,
-            rgba=finger_colors[finger],
-        )
+    return arm_spec.compile(), arm_spec
 
-    return arm_spec.compile()
-
-def save_model(model: mj.MjModel, path: Optional[str]=""):
-    mj_saveLastXML(path if path else f"{os.path.splitext(os.path.basename(__file__))[0]}.xml", model)
+def save_model_spec(model_spec: mj.MjSpec, path: Optional[str]=""):
+    # NOTE:
+    # mj_saveLastXML() only works upon model that was loaded with MjModel.[from_xml() or from_xml_string()]
+    # mj_saveModel() only writes to MJCB file
+    with open(path if path else f"{os.path.splitext(os.path.basename(__file__))[0]}.xml", "w") as f:
+        f.writelines(model_spec.to_xml())
 
 def main():
     parser = argparse.ArgumentParser()
@@ -81,7 +81,7 @@ def main():
     args = parser.parse_args()
 
     ########################## init ##########################
-    gs.init(seed=0, precision="32", logging_level="debug")
+    gs.init(seed=0, precision="32", backend=gs.gpu, logging_level="debug")
 
     ########################## create a scene ##########################
     scene = gs.Scene(
@@ -92,143 +92,185 @@ def main():
             max_FPS=200,
         ),
         show_viewer=args.vis,
+        show_FPS=True,
         rigid_options=gs.options.RigidOptions(
-            enable_joint_limit=False,
-            enable_collision=False,
+            enable_joint_limit=True,
+            enable_collision=True,
             gravity=(0, 0, -0),
         ),
     )
 
     ########################## entities ##########################
-
     plane = scene.add_entity(
         gs.morphs.Plane(),
     )
-    robot_morph = gs.morphs.MuJoCoMorph(model=construct_robot(), file=_IIWA14_ALLEGRO_XML.as_posix())
-    robot = scene.add_entity(robot_morph)
 
-    target_entity = scene.add_entity(
-        gs.morphs.Mesh(
+    # Robot
+    robot_model, robot_spec = construct_robot()
+    robot_morph = gs.morphs.MuJoCoMorph(model=robot_model, file=_IIWA14_ALLEGRO_XML.as_posix())
+    #save_model_spec(robot_spec)
+    robot = scene.add_entity(robot_morph)
+    robot.name = robot_spec.modelname
+
+    # Arm's EE (hand base)
+    hand_base = robot.get_link(HAND_BASE)
+    ee_target = scene.add_entity(
+        name=f"{ATTACH_PREFIX}ee_target",
+        morph=gs.morphs.Mesh(
             file="meshes/axis.obj",
             scale=0.10,
+            collision=False
         ),
         surface=gs.surfaces.Default(color=(1, 0.5, 0.5, 1)),
     )
-    ########################## build ##########################
+
+    # Palm
+    palm = robot.get_link(PALM)
+
+    # Fingertip targets
+    finger_ends: dict[str, RigidLink] = {}
+    finger_targets: dict[str, RigidEntity] = {}
+    for fingertip in fingertip_names:
+        finger_target = scene.add_entity(
+            name=f"{fingertip}_target",
+            morph=gs.morphs.Mesh(
+                file="meshes/axis.obj",
+                scale=0.10,
+                collision=False
+            ),
+            surface=gs.surfaces.Default(color=np.array(finger_colors[fingertip])),
+        )
+        finger_targets[fingertip] = finger_target
+        finger_ends[fingertip] = robot.get_link(f"{fingertip}end")
+
+    # Ball
+    ball = scene.add_entity(
+        name=BALL,
+        morph=gs.morphs.Sphere(radius=.07, collision=False),
+    )
+
+    ########################## build genesis scene ##########################
     scene.build()
 
+    if scene.sim.rigid_solver.is_active():
+        batch_idx = 0  # only visualize contact for the first scene
+        for i_con in range(scene.sim.rigid_solver.collider.n_contacts[batch_idx]):
+            contact_data = scene.sim.rigid_solver.collider.contact_data[i_con, batch_idx]
+            print(contact_data)
+            contact_pos = np.array(contact_data.pos) + scene.envs_offset[batch_idx]
+            #contact_data.force
+    ########################## config tasks ###################
+    robot.set_dofs_kp(
+        kp=np.full(robot_model.nq, 100),
+    )
+    robot.set_dofs_kv(
+        kv=np.full(robot_model.nq, 100),
+    )
+    robot.set_dofs_force_range(
+        np.full(robot_model.nq, -100),
+        np.full(robot_model.nq, 100),
+    )
     robot.set_qpos(HOME_QPOS)
+    target_quat = hand_base.get_quat().cpu().numpy()
+    center = np.array([0.5, 0, 0.5])
+    r = 0.1
 
-    damping = 1e-4
+    # Robot kinematic config
+    configuration = mink.Configuration(robot_model)
 
-    configuration = mink.Configuration(robot_morph.model)
-
+    # EE task
     end_effector_task = mink.FrameTask(
-        frame_name="attachment_site",
-        frame_type="site",
+        entity=robot,
+        frame=hand_base,
         position_cost=1.0,
         orientation_cost=1.0,
         lm_damping=1.0,
     )
 
-    posture_task = mink.PostureTask(model=robot_morph.model, cost=5e-2)
+    # Posture task
+    posture_task = mink.PostureTask(entity=robot, model=robot_model, cost=5e-2)
+    posture_task.set_target(robot.get_qpos().cpu().numpy()[:robot_model.nq])
 
-    finger_tasks = []
-    for finger in fingers:
+    # Finger tasks
+    finger_tasks = {}
+    for fingertip in fingertip_names:
         task = mink.RelativeFrameTask(
-            frame_name=f"allegro_left/{finger}",
-            frame_type="site",
-            root_name="allegro_left/palm",
-            root_type="body",
+            entity=robot,
+            frame=finger_ends[fingertip],
+            base=palm,
             position_cost=1.0,
             orientation_cost=0.0,
             lm_damping=1.0,
         )
-        finger_tasks.append(task)
+        finger_tasks[fingertip] = task
 
-    tasks = [end_effector_task, posture_task, *finger_tasks]
+    tasks = [end_effector_task, posture_task]
+    tasks.extend(finger_tasks.values())
 
+    # Joint limits
     limits = [
-        mink.ConfigurationLimit(model=robot_morph.model),
+        mink.ConfigurationLimit(entity=robot, model=robot_model),
     ]
 
-    # IK settings.
+    # IK settings
     solver = "quadprog"
-    model = configuration.model
-    data = configuration.data
-    fingers_following_ball_sites = False
 
-    configuration.update(data.qpos)
-    posture_task.set_target_from_configuration(configuration)
+    # Init the targets (ee_target + finger_targets)
+    mink.move_entity_to_entity(ee_target, hand_base)
+    for fingertip in fingertip_names:
+        mink.move_entity_to_entity(finger_targets[fingertip], finger_ends[fingertip])
+    T_ee_prev = configuration.get_transform_frame_to_world(hand_base)
 
-    # Initialize the mocap target at the end-effector site.
-    mink.move_mocap_to_frame(model, data, "target", "attachment_site", "site")
-    for finger in fingers:
-        mink.move_mocap_to_frame(
-            model, data, f"{finger}_target", f"allegro_left/{finger}", "site"
-        )
+    # Init ball
+    mink.move_entity_to_entity(ball, robot.get_link(BALL))
 
-    T_eef_prev = configuration.get_transform_frame_to_world(
-        "attachment_site", "site"
-    )
-
+    # Start exec loop
     rate = RateLimiter(frequency=100.0, warn=False)
+    i = 0
+    T_ee = None
     while scene.viewer.is_alive():
         # Update kuka end-effector task, as [target]'s SE3
-        T_wt = mink.SE3.from_mocap_name(model, data, "target")
+        T_wt = mink.SE3.from_entity(ee_target)
         end_effector_task.set_target(T_wt)
 
         # Update finger tasks' targets, relative SE3 from [fingertip] to [palm]
-        for finger, task in zip(fingers, finger_tasks):
-            T_pm = configuration.get_transform(
-                f"{finger}_target", "body", "allegro_left/palm", "body"
-            )
+        for fingertip, task in finger_tasks.items():
+            finger_target = finger_targets[fingertip]
+            T_pm = configuration.get_transform(finger_target, palm)
             task.set_target(T_pm)
 
-        # Move [EE] -> also moving fingertip-target mocap-bodies
-        for finger in fingers:
-            # Calc [T], delta SE3 from current EE to prev EE (attachment_site)
-            T_eef = configuration.get_transform_frame_to_world(
-                "attachment_site", "site"
-            )
-            print(f"{finger} T_eef: {T_eef}")
-            dT = T_eef @ T_eef_prev.inverse()
-            print(f"{finger} dT: {dT}")
+            # Move [EE] -> also moving finger_targets
+            # Calc [T], delta SE3 from current EE to prev EE (hand_base)
+            T_ee = configuration.get_transform_frame_to_world(hand_base)
+            dT = T_ee @ T_ee_prev.inverse()
 
-            # Calc [T_w_mocap], current fingertip-target mocap-body's SE3
-            if fingers_following_ball_sites:
-                site = sites[finger]
-                site_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_SITE, site)
-                T_w_mocap = mink.SE3.from_rotation_and_translation(
-                    rotation=mink.SO3.from_matrix(data.site_xmat[site_id].reshape(3, 3)),
-                    translation=data.site_xpos[site_id],
-                )
-            else:
-                T_w_mocap = mink.SE3.from_mocap_name(model, data, f"{finger}_target")
+            # Calc [T_finger_target], current fingertip-target's SE3
+            T_finger_target = configuration.get_transform_frame_to_world(finger_target)
 
-            # Calc [T_w_mocap_new], new expected fingertip-target mocap-body's SE3
-            # , moving them to new poses
-            T_w_mocap_new = dT @ T_w_mocap
-            data.mocap_pos[model.body(f"{finger}_target").mocapid[0]] = (
-                T_w_mocap_new.translation()
-            )
-            data.mocap_quat[model.body(f"{finger}_target").mocapid[0]] = (
-                T_w_mocap_new.rotation().wxyz
-            )
+            # Calc [T_finger_target_new], new expected fingertip-target mocap-body's SE3,
+            # moving them to new poses
+            T_finger_target_new = dT @ T_finger_target
+            mink.move_entity_to_frame(finger_target,
+                                      T_finger_target_new.translation(), T_finger_target_new.rotation().wxyz)
 
         # Compute velocity and integrate into the next configuration.
-        vel = mink.solve_ik(
-            configuration, tasks, rate.dt, solver, 1e-3, limits=limits
-        )
-        configuration.apply_ctrl(arm_dof, palm_dof, vel, rate.dt)
-        mj.mj_camlight(model, data)
+        vel = mink.solve_ik(robot,
+                            configuration, tasks, rate.dt, solver, 1e-3, limits=limits
+                            )
+        configuration.apply_ctrl(entity=robot, velocity=vel, dt=rate.dt, ctrl_type=gs.CTRL_MODE.VELOCITY)
 
-        T_eef_prev = T_eef.copy()
+        # Move [target] to new pose
+        i+=1
+        target_pos = center + np.array([np.cos(i / 360 * np.pi), np.sin(i / 360 * np.pi), 0]) * r
+        mink.move_entity_to_frame(ee_target, target_pos, target_quat)
 
-        # Visualize at fixed FPS.
+        # Save latest [T_eef]
+        T_ee_prev = T_ee.copy()
+
+        # Visualize at fixed FPS
         rate.sleep()
         scene.step()
-
+        # End main exec loop
 
 if __name__ == "__main__":
     main()
