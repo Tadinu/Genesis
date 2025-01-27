@@ -1,11 +1,13 @@
 logs/
 tmp/
 MUJOCO_LOG.TXT
+examples/video/
 imgui.ini
 .polyscope.ini
 .DS_Store
 sftp-config.json
 *.mp4
+*.pt
 genesis/assets/terrain/
 
 # Byte-compiled / optimized / DLL files
