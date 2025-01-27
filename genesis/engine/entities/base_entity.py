@@ -79,6 +79,14 @@ class Entity(RBC):
     # ------------------------------------------------------------------------------------
 
     @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
+
+    @property
     def uid(self):
         return self._uid
 
