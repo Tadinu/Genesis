@@ -11,7 +11,6 @@ from PIL import Image
 import genesis as gs
 from genesis.utils.misc import get_entry_point_name
 
-
 def animate(imgs, filename=None, fps=60):
     """
     Create a video from a list of images.
@@ -260,6 +259,7 @@ class StepTimer:
     def __init__(self):
         self._step_start: float | None = None
         self._previous_step_start: float | None = None
+        self.total_fps_text = ""
         self._phase_open: tuple[str, float] | None = None
         self._phases_time: dict[str, float] = {}
         self._timings: dict[str, float] = {}
