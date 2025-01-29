@@ -1079,6 +1079,7 @@ class Scene(RBC):
 
         if advance:
             with fps_tracker.phase("video"):
+            self.viewer.set_message(self.FPS_tracker.total_fps_text)
                 for camera in self._visualizer.cameras:
                     camera.update_recording()
         fps_tracker.step(count=advance)

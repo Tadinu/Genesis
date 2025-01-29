@@ -11,7 +11,6 @@ from PIL import Image
 import genesis as gs
 from genesis.utils.misc import get_entry_point_name
 
-
 def animate(imgs, filename=None, fps=60):
     """
     Create a video from a list of images.
@@ -216,6 +215,7 @@ class FPSTracker:
         self.steps_since_last_print: int = 0
         self.fps_ema = None
         self.total_fps = 0.0
+        self.total_fps_text = ""
         self._step_start = None
         self._phase_open: tuple[str, float] | None = None
         self._phases_time: dict[str, float] = {}
@@ -280,13 +280,11 @@ class FPSTracker:
 
         if self.n_envs > 0:
             self.total_fps = self.fps_ema * self.n_envs
-            gs.logger.info(
-                f"Running at ~<{self.total_fps:,.2f}>~ FPS (~<{self.fps_ema:.2f}>~ FPS per env, ~<{self.n_envs}>~ envs)."
-            )
+            self.total_fps_text = f"Running at ~<{self.total_fps:,.2f}>~ FPS (~<{fps:.2f}>~ FPS per env, ~<{self.n_envs}>~ envs)."
         else:
             self.total_fps = self.fps_ema
-            gs.logger.info(f"Running at ~<{self.fps_ema:.2f}>~ FPS.")
-
+            self.total_fps_text = f"Running at ~<{self.fps_ema:.2f}>~ FPS."
+        #gs.logger.info(self.total_fps_text)
         self.window_start = current_time
         self.steps_since_last_print = 0
         return self.total_fps
