@@ -1080,6 +1080,7 @@ class Scene(RBC):
         if advance:
             if self.options.profiling.show_FPS:
                 self.FPS_tracker.step()
+            self.viewer.set_message(self.FPS_tracker.total_fps_text)
             for camera in self._visualizer.cameras:
                 camera.update_recording()
 
