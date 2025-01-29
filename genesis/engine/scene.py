@@ -957,6 +957,7 @@ class Scene(RBC):
 
         if self.profiling_options.show_FPS:
             self.FPS_tracker.step()
+            self.viewer.set_message(self.FPS_tracker.total_fps_text)
 
         self._recorder_manager.step(self._sim.cur_step_global)
 

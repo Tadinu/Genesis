@@ -442,6 +442,14 @@ class Viewer(pyglet.window.Window):
         return self._is_active and (not self._run_in_thread or self._thread.is_alive())
 
     @property
+    def message_text(self):
+        return self._message_text
+
+    @message_text.setter
+    def message_text(self, text):
+        self._message_text = text
+
+    @property
     def run_in_thread(self):
         """bool : Whether the viewer was run in a separate thread."""
         return self._run_in_thread

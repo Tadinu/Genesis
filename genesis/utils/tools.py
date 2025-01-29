@@ -9,7 +9,6 @@ from PIL import Image
 
 import genesis as gs
 
-
 def animate(imgs, filename=None, fps=60):
     """
     Create a video from a list of images.
@@ -182,6 +181,8 @@ class FPSTracker:
         self.n_envs = n_envs
         self.dt_ema = None
         self.alpha = alpha
+        self.total_fps = 0
+        self.total_fps_text = ""
 
     def step(self):
         current_time = time.perf_counter()
@@ -199,10 +200,9 @@ class FPSTracker:
         fps = 1 / self.dt_ema
         if self.n_envs > 0:
             self.total_fps = fps * self.n_envs
-            gs.logger.info(
-                f"Running at ~<{self.total_fps:,.2f}>~ FPS (~<{fps:.2f}>~ FPS per env, ~<{self.n_envs}>~ envs)."
-            )
+            self.total_fps_text = f"Running at ~<{self.total_fps:,.2f}>~ FPS (~<{fps:.2f}>~ FPS per env, ~<{self.n_envs}>~ envs)."
         else:
             self.total_fps = fps
-            gs.logger.info(f"Running at ~<{fps:.2f}>~ FPS.")
+            self.total_fps_text = f"Running at ~<{fps:.2f}>~ FPS."
+        #gs.logger.info(self.total_fps_text)
         self.last_time = current_time

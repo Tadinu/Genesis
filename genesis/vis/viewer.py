@@ -141,6 +141,9 @@ class Viewer(RBC):
     def is_alive(self):
         return self._pyrender_viewer is not None and self._pyrender_viewer.is_active
 
+    def set_message(self, text):
+        self._pyrender_viewer.message_text = text
+
     def setup_camera(self):
         yfov = self._camera_fov / 180.0 * np.pi
         pose = gu.pos_lookat_up_to_T(self._camera_init_pos, self._camera_init_lookat, self._camera_up)
