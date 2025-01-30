@@ -711,6 +711,12 @@ def indices_to_mask(
 
     return tuple(mask)
 
+@ti.func
+def is_zero_array(v: ti.types.ndarray()) -> bool:
+    res = True
+    for i in range(v.shape[0]):
+        res &= (v[i] != 0)
+    return res
 
 def _maybe_transpose(tc, value, transpose):
     if not transpose or len(value.shape) <= 1:

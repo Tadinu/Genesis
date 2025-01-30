@@ -10,25 +10,13 @@ from loop_rate_limiters import RateLimiter
 import genesis as gs
 from genesis.planner import mink
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
+from genesis.ext import trimesh
+from genesis.ext.trimesh.collision import CollisionManager
 
 _HERE = Path(__file__).parent
 _ARM_XML = _HERE / "kuka_iiwa_14" / "scene.xml"
 _HAND_XML = _HERE / "wonik_allegro" / "left_hand.xml"
 _IIWA14_ALLEGRO_XML = _HERE / "kuka_iiwa_14_allegro" / "iiwa14_left_hand.xml"
-
-ATTACH_PREFIX = "allegro_left/"
-HAND_BASE = "hand_base"
-PALM = f"{ATTACH_PREFIX}palm"
-BALL = "ball"
-
-hand_fingertip_names = ["rf_tip", "mf_tip", "ff_tip", "th_tip"]
-fingertip_names = [f"{ATTACH_PREFIX}{ftip}" for ftip in hand_fingertip_names]
-finger_colors = {
-    fingertip_names[0]: [0.9, 0, 0, 1], # Red
-    fingertip_names[1]: [0, 0.9, 0, 1], # Green
-    fingertip_names[2]: [0, 0, 0.9, 1], # Blue
-    fingertip_names[3]: [0.9, 0.9, 0.9, 1] # White
-}
 
 # fmt: off
 HOME_QPOS = [
@@ -42,19 +30,45 @@ HOME_QPOS = [
 ]
 # fmt: on
 
+ARM_NAME = "iiwa14"
+ARM_BODIES_NAMES = []
+HAND_NAME = ""
+ATTACH_PREFIX = ""
+HAND_BASE = "hand_base"
+PALM = ""
+BALL_NAME = "ball"
+
+HAND_FINGERTIP_NAMES = ["rf_tip", "mf_tip", "ff_tip", "th_tip"]
+FINGERTIP_NAMES = []
+FINGERTIP_COLORS = {}
+
 ARM_DOF = 7
 PALM_DOF = 16
 def construct_robot():
+    global ARM_BODIES_NAMES, HAND_NAME, ATTACH_PREFIX, PALM, FINGERTIP_NAMES, FINGERTIP_COLORS
     # https://github.com/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
     arm_spec = mj.MjSpec.from_file(_ARM_XML.as_posix())
+    print(arm_spec.modelname)
+    ARM_BODIES_NAMES = [body.name for body in arm_spec.bodies]
 
     hand_spec = mj.MjSpec.from_file(_HAND_XML.as_posix())
+    HAND_NAME = hand_spec.modelname
+    ATTACH_PREFIX = f"{HAND_NAME}/"
+    PALM = f"{ATTACH_PREFIX}palm"
     palm = hand_spec.worldbody.find_child("palm")
     palm.quat = (1, 0, 0, 0)
     palm.pos = (0, 0, 0.095)
 
+    FINGERTIP_NAMES = [f"{ATTACH_PREFIX}{ftip}" for ftip in HAND_FINGERTIP_NAMES]
+    FINGERTIP_COLORS = {
+        FINGERTIP_NAMES[0]: [0.9, 0, 0, 1],  # Red
+        FINGERTIP_NAMES[1]: [0, 0.9, 0, 1],  # Green
+        FINGERTIP_NAMES[2]: [0, 0, 0.9, 1],  # Blue
+        FINGERTIP_NAMES[3]: [0.9, 0.9, 0.9, 1]  # White
+    }
+
     # Add fingertip-end bodies from sites (since Genesis does not build site info from MJ model)
-    for fingertip in hand_fingertip_names:
+    for fingertip in HAND_FINGERTIP_NAMES:
         fingertip_site = hand_spec.find_site(fingertip)
         hand_spec.find_body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
                                                 quat=fingertip_site.quat)
@@ -130,7 +144,7 @@ def main():
     # Fingertip targets
     finger_ends: dict[str, RigidLink] = {}
     finger_targets: dict[str, RigidEntity] = {}
-    for fingertip in fingertip_names:
+    for fingertip in FINGERTIP_NAMES:
         finger_target = scene.add_entity(
             name=f"{fingertip}_target",
             morph=gs.morphs.Mesh(
@@ -138,14 +152,14 @@ def main():
                 scale=0.10,
                 collision=False
             ),
-            surface=gs.surfaces.Default(color=np.array(finger_colors[fingertip])),
+            surface=gs.surfaces.Default(color=np.array(FINGERTIP_COLORS[fingertip])),
         )
         finger_targets[fingertip] = finger_target
         finger_ends[fingertip] = robot.get_link(f"{fingertip}end")
 
     # Ball
     ball = scene.add_entity(
-        name=BALL,
+        name=BALL_NAME,
         morph=gs.morphs.Sphere(radius=.07, collision=False),
     )
 
@@ -176,7 +190,7 @@ def main():
     r = 0.1
 
     # Robot kinematic config
-    configuration = mink.Configuration(robot_model)
+    configuration = mink.Configuration(model=robot_model)
 
     # EE task
     end_effector_task = mink.FrameTask(
@@ -193,7 +207,7 @@ def main():
 
     # Finger tasks
     finger_tasks = {}
-    for fingertip in fingertip_names:
+    for fingertip in FINGERTIP_NAMES:
         task = mink.RelativeFrameTask(
             entity=robot,
             frame=finger_ends[fingertip],
@@ -211,18 +225,77 @@ def main():
     limits = [
         mink.ConfigurationLimit(entity=robot, model=robot_model),
     ]
+    collision_pairs = [(ARM_NAME, BALL_NAME),
+                       (HAND_NAME, BALL_NAME),
+                       #(ARM_NAME, HAND_NAME)
+                       ]
+    # Collision managers
+    collision_managers = {
+        ARM_NAME: CollisionManager(),
+        HAND_NAME: CollisionManager(),
+        BALL_NAME: CollisionManager()
+    }
+
+    for body in robot_spec.bodies:
+        for i, geom in enumerate(body.geoms):
+            if geom.contype == 0 and geom.conaffinity == 0:
+                continue
+            geom_name = geom.name if geom.name else f"{body.name}_geom{i}"
+            mesh = None
+            mesh_name = None
+            if geom.type == mj.mjtGeom.mjGEOM_MESH:
+                mesh_name = geom.meshname
+                geom_meshpath = None
+                for mesh in robot_spec.meshes:
+                    if mesh.name == mesh_name:
+                        geom_meshpath = os.path.join(robot_spec.modelfiledir, robot_spec.meshdir,
+                                                     mesh.file)
+                        break
+                if geom_meshpath:
+                    mesh = trimesh.load_mesh(geom_meshpath)
+            else:
+                mesh_name = geom_name
+                if geom.type == mj.mjtGeom.mjGEOM_BOX:
+                    mesh = trimesh.primitives.Box()
+                elif geom.type == mj.mjtGeom.mjGEOM_SPHERE:
+                    mesh = trimesh.primitives.Sphere(radius=geom.size[0])
+
+                elif geom.type == mj.mjtGeom.mjGEOM_CYLINDER:
+                    mesh = trimesh.primitives.Cylinder(radius=geom.size[0], height=geom.size[1])
+
+                elif geom.type == mj.mjtGeom.mjGEOM_CAPSULE:
+                    mesh = trimesh.primitives.Capsule(radius=geom.size[0], height=geom.size[1])
+
+                elif geom.type == mj.mjtGeom.mjGEOM_PLANE:
+                    mesh = trimesh.primitives.Box(extents=geom.size)
+
+            if mesh:
+                collision_mang =  collision_managers[ARM_NAME] if body.name in ARM_BODIES_NAMES \
+                                  else collision_managers[HAND_NAME] if body.name.startswith(ATTACH_PREFIX) \
+                                  else collision_managers[BALL_NAME]
+                collision_mang.add_object(name=mesh_name, mesh=mesh)
+
+    # Collision avoidance limit
+    limits.append(mink.CollisionAvoidanceLimit(
+        entity = robot,
+        model = robot_model,
+        collision_managers = collision_managers,
+        collision_pairs = collision_pairs,
+        minimum_distance_from_collisions = 0.1,
+        collision_detection_distance = 0.2,
+    ))
 
     # IK settings
     solver = "quadprog"
 
     # Init the targets (ee_target + finger_targets)
     mink.move_entity_to_entity(ee_target, hand_base)
-    for fingertip in fingertip_names:
+    for fingertip in FINGERTIP_NAMES:
         mink.move_entity_to_entity(finger_targets[fingertip], finger_ends[fingertip])
     T_ee_prev = configuration.get_transform_frame_to_world(hand_base)
 
     # Init ball
-    mink.move_entity_to_entity(ball, robot.get_link(BALL))
+    mink.move_entity_to_entity(ball, robot.get_link(BALL_NAME))
 
     # Start exec loop
     rate = RateLimiter(frequency=100.0, warn=False)
