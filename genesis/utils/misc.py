@@ -839,6 +839,12 @@ def indices_to_mask(
 
     return tuple(mask)
 
+@ti.func
+def is_zero_array(v: ti.types.ndarray()) -> bool:
+    res = True
+    for i in range(v.shape[0]):
+        res &= (v[i] != 0)
+    return res
 
 def _reset_ndarray_with_views(ndarray):
     """Drop the views 'qd_to_torch' and 'qd_to_numpy' cached on an ndarray, then reset it.

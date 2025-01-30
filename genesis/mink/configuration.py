@@ -18,9 +18,11 @@ from . import exceptions
 from .lie import SE3, SO3
 
 # Genesis
+import taichi as ti
 from genesis.repr_base import RBC
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 from genesis import CTRL_MODE as GS_CTRL_MODE
+
 
 class Configuration:
     """Encapsulates a model and data for convenient access to kinematic quantities.
