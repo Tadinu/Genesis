@@ -1,3 +1,4 @@
+
 from copy import copy
 from itertools import chain
 from typing import TYPE_CHECKING, Literal
@@ -1017,7 +1018,6 @@ class RigidEntity(Entity):
                     i_d_jac = i_d + dof_offset - self._dof_start
                     rotation = gu.ti_transform_by_quat(dofs_info.motion_ang[I_d], links_state.quat[i_l, i_b])
                     translation = rotation.cross(tgt_link_pos - links_state.pos[i_l, i_b])
-
                     self._jacobian[0, i_d_jac, i_b] = translation[0] * pos_mask[0]
                     self._jacobian[1, i_d_jac, i_b] = translation[1] * pos_mask[1]
                     self._jacobian[2, i_d_jac, i_b] = translation[2] * pos_mask[2]

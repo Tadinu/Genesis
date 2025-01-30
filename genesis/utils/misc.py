@@ -704,6 +704,12 @@ def _ti_to_python(
 
     return out
 
+@ti.func
+def is_zero_array(v: ti.types.ndarray()) -> bool:
+    res = True
+    for i in range(v.shape[0]):
+        res &= (v[i] != 0)
+    return res
 
 def ti_to_torch(
     value,
