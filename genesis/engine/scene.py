@@ -334,6 +334,7 @@ class Scene(RBC):
     def add_entity(
         self,
         morph: Morph | Iterable[Morph],
+        name: str = None,
         material: Material | None = None,
         surface: Surface | None = None,
         visualize_contact: bool = False,

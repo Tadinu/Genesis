@@ -13,12 +13,10 @@ from typing import Optional
 import mujoco
 import numpy as np
 
-from . import constants as consts
 from . import exceptions
 from .lie import SE3, SO3
 
 # Genesis
-import taichi as ti
 from genesis.repr_base import RBC
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 from genesis import CTRL_MODE as GS_CTRL_MODE
@@ -166,27 +164,22 @@ class Configuration:
         mujoco.mj_integratePos(self.model, q, velocity, dt)
         return q
 
-    def apply_ctrl(self, entity: RigidEntity, velocity: np.ndarray, dt: float,
-                   force: Optional[np.ndarray] = None,
-                   ctrl_type: Optional[GS_CTRL_MODE] = GS_CTRL_MODE.VELOCITY) -> np.ndarray:
+    def apply_ctrl(self, entity: RigidEntity,
+                   ctrl: Optional[np.ndarray] = None,
+                   ctrl_mode: Optional[GS_CTRL_MODE] = GS_CTRL_MODE.VELOCITY) -> np.ndarray:
         """Integrate a velocity and update the current configuration inplace.
 
         Args:
-            arm_dof: Number of arm joints.
-            hand_dof: Number of hand joints.
-            velocity: The velocity in tangent space.
-            dt: Integration duration in [s].
+            entity: Controlled entity
+            ctrl: Control inputs (eg: position in generalized space, velocity in tangent space, or force)
+            ctrl_mode: Control type (position, velocity, force)
         """
-        if ctrl_type == GS_CTRL_MODE.POSITION:
-            # position-control
-            q = self.integrate(entity, velocity, dt)
-            entity.control_dofs_position(q)
-        elif ctrl_type == GS_CTRL_MODE.VELOCITY:
-            # velocity-control
-            entity.control_dofs_velocity(velocity)
-        elif ctrl_type == GS_CTRL_MODE.FORCE:
-            # force-control
-            entity.control_dofs_force(force)
+        if ctrl_mode == GS_CTRL_MODE.POSITION:
+            entity.control_dofs_position(ctrl)
+        elif ctrl_mode == GS_CTRL_MODE.VELOCITY:
+            entity.control_dofs_velocity(ctrl)
+        elif ctrl_mode == GS_CTRL_MODE.FORCE:
+            entity.control_dofs_force(ctrl)
 
     @property
     def nv(self) -> int:
