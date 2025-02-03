@@ -426,6 +426,8 @@ def tensor_to_cpu(x):
 def tensor_to_array(x: torch.Tensor, dtype: type[np.generic] | None = None) -> np.ndarray:
     return np.asarray(tensor_to_cpu(x), dtype=dtype)
 
+def tensor_inf_with_scalar(x, scalar):
+    return torch.where(torch.isinf(x), torch.tensor(scalar, dtype=x.dtype, device=x.device), x)
 
 def data_to_array(data):
     """Recursively move any GPU tensor nested in ``data`` to a CPU numpy array, preserving container structure."""

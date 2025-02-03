@@ -2224,10 +2224,10 @@ class RigidEntity(KinematicEntity):
 
     @gs.assert_built
     def get_links_pos(
-        self,
-        links_idx_local=None,
-        envs_idx=None,
-        *,
+            self,
+            links_idx_local=None,
+            envs_idx=None,
+            *,
         ref: link_ref_frame = link_ref_frame.link_origin,
         relative=True,
     ):
@@ -3012,6 +3012,18 @@ class RigidEntity(KinematicEntity):
         return self._solver.get_dofs_force_range(dofs_idx, envs_idx)
 
     @gs.assert_built
+
+    @gs.assert_built
+    def get_dofs_limit_numpy(self, dofs_idx_local=None, envs_idx=None):
+        limits = self.get_dofs_limit(dofs_idx_local, envs_idx)
+        if not len(limits[0]):
+            return np.array([])
+        lower = tensor_inf_with_scalar(limits[0], -1).cpu().numpy()
+        upper = tensor_inf_with_scalar(limits[1], 1).cpu().numpy()
+        dofs_limit = np.empty((len(limits[0]), 2), dtype=float)
+        dofs_limit[:len(lower), 0] = lower
+        dofs_limit[:len(upper), 1] = upper
+        return dofs_limit
     def get_dofs_stiffness(self, dofs_idx_local=None, envs_idx=None):
         dofs_idx = self._get_global_idx(dofs_idx_local, self.n_dofs, self._dof_start, unsafe=True)
         return self._solver.get_dofs_stiffness(dofs_idx, envs_idx)

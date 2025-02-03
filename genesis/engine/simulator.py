@@ -144,6 +144,7 @@ class Simulator(RBC):
             entity = solver.add_entity(
                 self.n_entities, material, morph, surface, visualize_contact, name=name, desc=desc
             )
+        entity.name = name
         self._entities.append(entity)
         if entity.desc is not None:
             self.scene._desc.entities.append(entity.desc)

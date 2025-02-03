@@ -12,7 +12,7 @@ def main():
 
     scene = gs.Scene(
         sim_options=gs.options.SimOptions(
-            dt=4e-3,
+            dt=0.0003125,
             substeps=10,
         ),
         mpm_options=gs.options.MPMOptions(

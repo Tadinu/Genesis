@@ -10,7 +10,6 @@ from .limits import ConfigurationLimit, Limit
 from .tasks import Objective, Task
 
 # Genesis
-from genesis import mink
 from genesis.engine.entities.rigid_entity import RigidEntity
 
 
@@ -86,7 +85,8 @@ def solve_ik(
     velocity satisfies at (weighted) best the set of provided kinematic tasks.
 
     Args:
-        configuration: Robot configuration.
+        entity: System entity
+        configuration: System configuration.
         tasks: List of kinematic tasks.
         dt: Integration timestep in [s].
         solver: Backend quadratic programming (QP) solver.

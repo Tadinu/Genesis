@@ -24,7 +24,7 @@ class SE3(MatrixLieGroup):
     (vx, vy, vz, omega_x, omega_y, omega_z).
     """
 
-    wxyz_xyz: np.ndarray
+    wxyz_xyz: np.ndarray = _IDENTITY_WXYZ_XYZ
     matrix_dim: int = 4
     parameters_dim: int = 7
     tangent_dim: int = 6

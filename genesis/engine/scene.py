@@ -322,6 +322,7 @@ class Scene(RBC):
     def add_entity(
         self,
         morph: Morph | Iterable[Morph],
+        name: str = None,
         material: Material | None = None,
         surface: Surface | None = None,
         visualize_contact: bool = False,
@@ -1080,7 +1081,8 @@ class Scene(RBC):
         if advance:
             if self.options.profiling.show_FPS:
                 self.FPS_tracker.step()
-            self.viewer.set_message(self.FPS_tracker.total_fps_text)
+            if self.viewer:
+                self.viewer.set_message(self.FPS_tracker.total_fps_text)
             for camera in self._visualizer.cameras:
                 camera.update_recording()
 

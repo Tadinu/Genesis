@@ -12,7 +12,7 @@ from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 def move_entity_to_frame(
     entity: RigidEntity,
     frame_pos: np.ndarray,
-    frame_quat: np.ndarray
+    frame_quat: np.ndarray = (1, 0, 0, 0)
 ) -> None:
     #entity.set_qpos(np.concatenate([frame_pos, frame_quat]))
     entity.set_pos(frame_pos)
