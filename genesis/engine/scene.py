@@ -313,6 +313,7 @@ class Scene(RBC):
     def add_entity(
         self,
         morph: Morph,
+        name: str = None,
         material: Material | None = None,
         surface: Surface | None = None,
         visualize_contact: bool = False,
@@ -440,8 +441,8 @@ class Scene(RBC):
             # Rigid entities will convexify geom by default
             if morph.convexify is None:
                 morph.convexify = isinstance(material, (gs.materials.Rigid, gs.materials.Avatar))
+       entity = self._sim._add_entity(name, morph, material, surface, visualize_contact)
 
-        entity = self._sim._add_entity(morph, material, surface, visualize_contact)
 
         return entity
 
@@ -957,7 +958,8 @@ class Scene(RBC):
 
         if self.profiling_options.show_FPS:
             self.FPS_tracker.step()
-            self.viewer.set_message(self.FPS_tracker.total_fps_text)
+            if self.viewer:
+                self.viewer.set_message(self.FPS_tracker.total_fps_text)
 
         self._recorder_manager.step(self._sim.cur_step_global)
 

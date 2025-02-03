@@ -156,7 +156,7 @@ class Simulator(RBC):
         # sensors
         self._sensor_manager = SensorManager(self)
 
-    def _add_entity(self, morph: Morph, material, surface, visualize_contact=False):
+    def _add_entity(self, name: str, morph: Morph, material, surface, visualize_contact=False):
         if isinstance(material, gs.materials.Tool):
             entity = self.tool_solver.add_entity(self.n_entities, material, morph, surface)
 
@@ -186,6 +186,7 @@ class Simulator(RBC):
         else:
             gs.raise_exception(f"Material not supported.: {material}")
 
+        entity.name = name
         self._entities.append(entity)
         return entity
 

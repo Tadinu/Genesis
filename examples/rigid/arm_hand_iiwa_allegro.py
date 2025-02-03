@@ -8,342 +8,414 @@ import mujoco as mj
 from loop_rate_limiters import RateLimiter
 
 import genesis as gs
-from genesis.planner import mink
+from genesis.controller import mink
+from genesis.options import SimOptions
+from genesis.options.morphs import Primitive
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 from genesis.ext import trimesh
 from genesis.ext.trimesh.collision import CollisionManager
+from genesis.system.base_system import BaseSystem
 
 _HERE = Path(__file__).parent
-_ARM_XML = _HERE / "kuka_iiwa_14" / "scene.xml"
-_HAND_XML = _HERE / "wonik_allegro" / "left_hand.xml"
-_IIWA14_ALLEGRO_XML = _HERE / "kuka_iiwa_14_allegro" / "iiwa14_left_hand.xml"
 
-# fmt: off
-HOME_QPOS = [
-    # iiwa.
-    -0.0759329, 0.153982, 0.104381, -1.8971, 0.245996, 0.34972, -0.239115,
-    # allegro.
-    -0.0694123, 0.0551428, 0.986832, 0.671424,
-    -0.186261, -0.0866821, 1.01374, 0.728192,
-    -0.218949, -0.0318307, 1.25156, 0.840648,
-    1.0593, 0.638801, 0.391599, 0.57284
-]
-# fmt: on
+class Iiwa14Allegro(BaseSystem):
+    ARM_XML = _HERE / "kuka_iiwa_14" / "scene.xml"
+    HAND_XML = _HERE / "wonik_allegro" / "left_hand.xml"
+    IIWA14_ALLEGRO_XML = _HERE / "kuka_iiwa_14_allegro" / "iiwa14_left_hand.xml"
 
-ARM_NAME = "iiwa14"
-ARM_BODIES_NAMES = []
-HAND_NAME = ""
-ATTACH_PREFIX = ""
-HAND_BASE = "hand_base"
-PALM = ""
-BALL_NAME = "ball"
+    ARM_NAME = "iiwa14"
+    ARM_BODIES_NAMES = []
+    HAND_BASE_NAME = "attachment"
+    HAND_FINGERTIP_NAMES = ["rf_tip", "mf_tip", "ff_tip", "th_tip"]
+    FINGERTIP_NAMES = []
+    FINGERTIP_COLORS = {}
+    PALM_NAME = ""
+    ATTACH_PREFIX = ""
+    ARM_DOFS_NO = 7
+    HAND_DOFS_NO = 16
 
-HAND_FINGERTIP_NAMES = ["rf_tip", "mf_tip", "ff_tip", "th_tip"]
-FINGERTIP_NAMES = []
-FINGERTIP_COLORS = {}
+    HOME_QPOS = [
+        # iiwa.
+        -0.0759329, 0.153982, 0.104381, -1.8971, 0.245996, 0.34972, -0.239115,
+        # allegro.
+        -0.0694123, 0.0551428, 0.986832, 0.671424,
+        -0.186261, -0.0866821, 1.01374, 0.728192,
+        -0.218949, -0.0318307, 1.25156, 0.840648,
+        1.0593, 0.638801, 0.391599, 0.57284
+    ]
 
-ARM_DOF = 7
-PALM_DOF = 16
-def construct_robot():
-    global ARM_BODIES_NAMES, HAND_NAME, ATTACH_PREFIX, PALM, FINGERTIP_NAMES, FINGERTIP_COLORS
-    # https://github.com/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
-    arm_spec = mj.MjSpec.from_file(_ARM_XML.as_posix())
-    print(arm_spec.modelname)
-    ARM_BODIES_NAMES = [body.name for body in arm_spec.bodies]
+    def __init__(self, scene: gs.Scene, system_model: mj.MjModel,
+                 system_spec: mj.MjSpec,
+                 system_name: str, system_xml_path: str,
+                 pos: np.ndarray = BaseSystem.ZERO_XYZ,
+                 quat: np.ndarray = BaseSystem.IDENTITY_WXYZ,
+                 gravity_compensation: float = 1.,
+                 collision: bool = True):
+        super().__init__(scene, system_model, system_spec, system_name, system_xml_path,
+                         pos, quat, q0=Iiwa14Allegro.HOME_QPOS,
+                         gravity_compensation=gravity_compensation, collision=collision)
+        self.ee_task: mink.FrameTask = None
+        self.posture_task: mink.Task = None
+        self.ee_target: RigidEntity = None
+        self.finger_tasks: dict[str, mink.RelativeFrameTask] = None
+        self.finger_ends: dict[str, RigidLink] = {}
+        self.finger_targets: dict[str, RigidEntity] = {}
+        self.plane: Primitive = None
+        self.palm: RigidLink = None
+        self.hand_base: RigidLink = None
+        self.T_ee_prev: mink.SE3 = None
+        self.N_DOFS = Iiwa14Allegro.ARM_DOFS_NO + Iiwa14Allegro.HAND_DOFS_NO
 
-    hand_spec = mj.MjSpec.from_file(_HAND_XML.as_posix())
-    HAND_NAME = hand_spec.modelname
-    ATTACH_PREFIX = f"{HAND_NAME}/"
-    PALM = f"{ATTACH_PREFIX}palm"
-    palm = hand_spec.worldbody.find_child("palm")
-    palm.quat = (1, 0, 0, 0)
-    palm.pos = (0, 0, 0.095)
+        # 1- EE (hand base)
+        self.hand_base = self.system.get_link(Iiwa14Allegro.HAND_BASE_NAME)
 
-    FINGERTIP_NAMES = [f"{ATTACH_PREFIX}{ftip}" for ftip in HAND_FINGERTIP_NAMES]
-    FINGERTIP_COLORS = {
-        FINGERTIP_NAMES[0]: [0.9, 0, 0, 1],  # Red
-        FINGERTIP_NAMES[1]: [0, 0.9, 0, 1],  # Green
-        FINGERTIP_NAMES[2]: [0, 0, 0.9, 1],  # Blue
-        FINGERTIP_NAMES[3]: [0.9, 0.9, 0.9, 1]  # White
-    }
+        # 2- Palm
+        self.palm = self.system.get_link(Iiwa14Allegro.PALM_NAME)
 
-    # Add fingertip-end bodies from sites (since Genesis does not build site info from MJ model)
-    for fingertip in HAND_FINGERTIP_NAMES:
-        fingertip_site = hand_spec.find_site(fingertip)
-        hand_spec.find_body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
-                                                quat=fingertip_site.quat)
-
-    # Attach [hand_spec] to [arm_spec]
-    attach_site = arm_spec.find_site("attachment_site")
-    attach_site.attach(hand_spec, ATTACH_PREFIX)
-
-    # TODO: Remove prev "home" key from arm_spec once MuJoCo releases [rem_key] API
-    arm_spec.add_key(name="home2", qpos=HOME_QPOS)
-
-    return arm_spec.compile(), arm_spec
-
-def save_model_spec(model_spec: mj.MjSpec, path: Optional[str]=""):
-    # NOTE:
-    # mj_saveLastXML() only works upon model that was loaded with MjModel.[from_xml() or from_xml_string()]
-    # mj_saveModel() only writes to MJCB file
-    with open(path if path else f"{os.path.splitext(os.path.basename(__file__))[0]}.xml", "w") as f:
-        f.writelines(model_spec.to_xml())
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--vis", action="store_true", default=False)
-    args = parser.parse_args()
-
-    ########################## init ##########################
-    gs.init(seed=0, precision="32", backend=gs.gpu, logging_level="debug")
-
-    ########################## create a scene ##########################
-    scene = gs.Scene(
-        viewer_options=gs.options.ViewerOptions(
-            camera_pos=(0.0, -2, 1.5),
-            camera_lookat=(0.0, 0.0, 0.5),
-            camera_fov=40,
-            max_FPS=200,
-        ),
-        show_viewer=args.vis,
-        show_FPS=True,
-        rigid_options=gs.options.RigidOptions(
-            enable_joint_limit=True,
-            enable_collision=True,
-            gravity=(0, 0, -0),
-        ),
-    )
-
-    ########################## entities ##########################
-    plane = scene.add_entity(
-        gs.morphs.Plane(),
-    )
-
-    # Robot
-    robot_model, robot_spec = construct_robot()
-    robot_morph = gs.morphs.MuJoCoMorph(model=robot_model, file=_IIWA14_ALLEGRO_XML.as_posix())
-    #save_model_spec(robot_spec)
-    robot = scene.add_entity(robot_morph)
-    robot.name = robot_spec.modelname
-
-    # Arm's EE (hand base)
-    hand_base = robot.get_link(HAND_BASE)
-    ee_target = scene.add_entity(
-        name=f"{ATTACH_PREFIX}ee_target",
-        morph=gs.morphs.Mesh(
-            file="meshes/axis.obj",
-            scale=0.10,
-            collision=False
-        ),
-        surface=gs.surfaces.Default(color=(1, 0.5, 0.5, 1)),
-    )
-
-    # Palm
-    palm = robot.get_link(PALM)
-
-    # Fingertip targets
-    finger_ends: dict[str, RigidLink] = {}
-    finger_targets: dict[str, RigidEntity] = {}
-    for fingertip in FINGERTIP_NAMES:
-        finger_target = scene.add_entity(
-            name=f"{fingertip}_target",
+        # 3- Targets
+        self.targets_frame = 0
+        # 3.1- EE target
+        self.EE_TARGET_CENTER_DEFAULT = np.array([0.5, 0, 0.5])
+        self.EE_TARGET_QUAT_DEFAULT = np.array([0, 1, 0, 0])
+        self.EE_TARGET_MOVEMENT_RADIUS_DEFAULT = 0.1
+        self.ee_target = self.scene.add_entity(
+            name=f"{Iiwa14Allegro.ATTACH_PREFIX}ee_target",
             morph=gs.morphs.Mesh(
                 file="meshes/axis.obj",
                 scale=0.10,
                 collision=False
             ),
-            surface=gs.surfaces.Default(color=np.array(FINGERTIP_COLORS[fingertip])),
+            surface=gs.surfaces.Default(color=(1, 0.5, 0.5, 1)),
         )
-        finger_targets[fingertip] = finger_target
-        finger_ends[fingertip] = robot.get_link(f"{fingertip}end")
 
-    # Ball
-    ball = scene.add_entity(
-        name=BALL_NAME,
-        morph=gs.morphs.Sphere(radius=.07, collision=False),
-    )
+        # 3.2- Fingertip targets
+        for fingertip in Iiwa14Allegro.FINGERTIP_NAMES:
+            finger_target = self.scene.add_entity(
+                name=f"{fingertip}_target",
+                morph=gs.morphs.Mesh(
+                    file="meshes/axis.obj",
+                    scale=0.10,
+                    collision=False
+                ),
+                surface=gs.surfaces.Default(color=np.array(Iiwa14Allegro.FINGERTIP_COLORS[fingertip])),
+            )
+            self.finger_targets[fingertip] = finger_target
+            self.finger_ends[fingertip] = self.system.get_link(f"{fingertip}end")
 
-    ########################## build genesis scene ##########################
-    scene.build()
+    def _config_control(self) -> None:
+        self.system.set_dofs_kp(
+            kp=np.full(self.N_DOFS, 100),
+        )
+        self.system.set_dofs_kv(
+            kv=np.full(self.N_DOFS, 100),
+        )
+        self.system.set_dofs_force_range(
+            np.full(self.N_DOFS, -100),
+            np.full(self.N_DOFS, 100),
+        )
 
-    if scene.sim.rigid_solver.is_active():
-        batch_idx = 0  # only visualize contact for the first scene
-        for i_con in range(scene.sim.rigid_solver.collider.n_contacts[batch_idx]):
-            contact_data = scene.sim.rigid_solver.collider.contact_data[i_con, batch_idx]
-            print(contact_data)
-            contact_pos = np.array(contact_data.pos) + scene.envs_offset[batch_idx]
-            #contact_data.force
-    ########################## config tasks ###################
-    robot.set_dofs_kp(
-        kp=np.full(robot_model.nq, 100),
-    )
-    robot.set_dofs_kv(
-        kv=np.full(robot_model.nq, 100),
-    )
-    robot.set_dofs_force_range(
-        np.full(robot_model.nq, -100),
-        np.full(robot_model.nq, 100),
-    )
-    robot.set_qpos(HOME_QPOS)
-    target_quat = hand_base.get_quat().cpu().numpy()
-    center = np.array([0.5, 0, 0.5])
-    r = 0.1
-
-    # Robot kinematic config
-    configuration = mink.Configuration(model=robot_model)
-
-    # EE task
-    end_effector_task = mink.FrameTask(
-        entity=robot,
-        frame=hand_base,
-        position_cost=1.0,
-        orientation_cost=1.0,
-        lm_damping=1.0,
-    )
-
-    # Posture task
-    posture_task = mink.PostureTask(entity=robot, model=robot_model, cost=5e-2)
-    posture_task.set_target(robot.get_qpos().cpu().numpy()[:robot_model.nq])
-
-    # Finger tasks
-    finger_tasks = {}
-    for fingertip in FINGERTIP_NAMES:
-        task = mink.RelativeFrameTask(
-            entity=robot,
-            frame=finger_ends[fingertip],
-            base=palm,
+    def _config_tasks(self):
+        # EE task
+        self.ee_task = mink.FrameTask(
+            entity=self.system,
+            frame=self.hand_base,
             position_cost=1.0,
-            orientation_cost=0.0,
+            orientation_cost=1.0,
             lm_damping=1.0,
         )
-        finger_tasks[fingertip] = task
 
-    tasks = [end_effector_task, posture_task]
-    tasks.extend(finger_tasks.values())
+        # Posture task
+        self.posture_task = mink.PostureTask(entity=self.system, model=self.system_model, cost=5e-2)
+        self.posture_task.set_target(self.system.get_qpos().cpu().numpy())
 
-    # Joint limits
-    limits = [
-        mink.ConfigurationLimit(entity=robot, model=robot_model),
-    ]
-    collision_pairs = [(ARM_NAME, BALL_NAME),
-                       (HAND_NAME, BALL_NAME),
-                       #(ARM_NAME, HAND_NAME)
-                       ]
-    # Collision managers
-    collision_managers = {
-        ARM_NAME: CollisionManager(),
-        HAND_NAME: CollisionManager(),
-        BALL_NAME: CollisionManager()
-    }
+        # Finger tasks
+        self.finger_tasks = {}
+        for fingertip in self.FINGERTIP_NAMES:
+            task = mink.RelativeFrameTask(
+                entity=self.system,
+                frame=self.finger_ends[fingertip],
+                base=self.palm,
+                position_cost=1.0,
+                orientation_cost=0.0,
+                lm_damping=1.0,
+            )
+            self.finger_tasks[fingertip] = task
 
-    for body in robot_spec.bodies:
-        for i, geom in enumerate(body.geoms):
-            if geom.contype == 0 and geom.conaffinity == 0:
-                continue
-            geom_name = geom.name if geom.name else f"{body.name}_geom{i}"
-            mesh = None
-            mesh_name = None
-            if geom.type == mj.mjtGeom.mjGEOM_MESH:
-                mesh_name = geom.meshname
-                geom_meshpath = None
-                for mesh in robot_spec.meshes:
-                    if mesh.name == mesh_name:
-                        geom_meshpath = os.path.join(robot_spec.modelfiledir, robot_spec.meshdir,
-                                                     mesh.file)
-                        break
-                if geom_meshpath:
-                    mesh = trimesh.load_mesh(geom_meshpath)
-            else:
-                mesh_name = geom_name
-                if geom.type == mj.mjtGeom.mjGEOM_BOX:
-                    mesh = trimesh.primitives.Box()
-                elif geom.type == mj.mjtGeom.mjGEOM_SPHERE:
-                    mesh = trimesh.primitives.Sphere(radius=geom.size[0])
+        self.tasks = [self.ee_task, self.posture_task]
+        self.tasks.extend(self.finger_tasks.values())
 
-                elif geom.type == mj.mjtGeom.mjGEOM_CYLINDER:
-                    mesh = trimesh.primitives.Cylinder(radius=geom.size[0], height=geom.size[1])
+    def _config_limits(self):
+        # Joint limits
+        self.limits = [
+            mink.ConfigurationLimit(entity=self.system, model=self.system_model),
+        ]
+        """
+        self.collision_pairs = [] #[(Iiwa14Allegro.ARM_NAME, Iiwa14Allegro.HAND_NAME)]
+        for obs_name in self.OBSTACLE_NAMES:
+            self.collision_managers[obs_name] = CollisionManager()
+            self.collision_pairs.extend([(self.ARM_NAME, obs_name),
+                                         (self.HAND_NAME, obs_name)])
 
-                elif geom.type == mj.mjtGeom.mjGEOM_CAPSULE:
-                    mesh = trimesh.primitives.Capsule(radius=geom.size[0], height=geom.size[1])
+        # Collision managers
+        for collision_pair in self.collision_pairs:
+            self.collision_managers[collision_pair[0]] = CollisionManager()
 
-                elif geom.type == mj.mjtGeom.mjGEOM_PLANE:
-                    mesh = trimesh.primitives.Box(extents=geom.size)
+        for body in self.system_spec.bodies:
+            for i, geom in enumerate(body.geoms):
+                if geom.contype == 0 and geom.conaffinity == 0:
+                    continue
+                geom_name = geom.name if geom.name else f"{body.name}_geom{i}"
+                mesh = None
+                mesh_name = None
+                if geom.type == mj.mjtGeom.mjGEOM_MESH:
+                    mesh_name = geom.meshname
+                    geom_meshpath = None
+                    for mesh in self.system_spec.meshes:
+                        if mesh.name == mesh_name:
+                            geom_meshpath = os.path.join(self.system_spec.modelfiledir, self.system_spec.meshdir,
+                                                         mesh.file)
+                            break
+                    if geom_meshpath:
+                        mesh = trimesh.load_mesh(geom_meshpath)
+                else:
+                    mesh_name = geom_name
+                    if geom.type == mj.mjtGeom.mjGEOM_BOX:
+                        mesh = trimesh.primitives.Box()
+                    elif geom.type == mj.mjtGeom.mjGEOM_SPHERE:
+                        mesh = trimesh.primitives.Sphere(radius=geom.size[0])
 
-            if mesh:
-                collision_mang =  collision_managers[ARM_NAME] if body.name in ARM_BODIES_NAMES \
-                                  else collision_managers[HAND_NAME] if body.name.startswith(ATTACH_PREFIX) \
-                                  else collision_managers[BALL_NAME]
-                collision_mang.add_object(name=mesh_name, mesh=mesh)
+                    elif geom.type == mj.mjtGeom.mjGEOM_CYLINDER:
+                        mesh = trimesh.primitives.Cylinder(radius=geom.size[0], height=geom.size[1])
 
-    # Collision avoidance limit
-    limits.append(mink.CollisionAvoidanceLimit(
-        entity = robot,
-        model = robot_model,
-        collision_managers = collision_managers,
-        collision_pairs = collision_pairs,
-        minimum_distance_from_collisions = 0.1,
-        collision_detection_distance = 0.2,
-    ))
+                    elif geom.type == mj.mjtGeom.mjGEOM_CAPSULE:
+                        mesh = trimesh.primitives.Capsule(radius=geom.size[0], height=geom.size[1])
 
-    # IK settings
-    solver = "quadprog"
+                    elif geom.type == mj.mjtGeom.mjGEOM_PLANE:
+                        mesh = trimesh.primitives.Box(extents=geom.size)
 
-    # Init the targets (ee_target + finger_targets)
-    mink.move_entity_to_entity(ee_target, hand_base)
-    for fingertip in FINGERTIP_NAMES:
-        mink.move_entity_to_entity(finger_targets[fingertip], finger_ends[fingertip])
-    T_ee_prev = configuration.get_transform_frame_to_world(hand_base)
+                if mesh:
+                    for obs_name in len(self.OBSTACLE_NAMES):
+                        collision_mang = self.collision_managers[self.ARM_NAME] if body.name in Iiwa14Allegro.ARM_BODIES_NAMES \
+                                         else self.collision_managers[self.HAND_NAME] if body.name.startswith(Iiwa14Allegro.ATTACH_PREFIX) \
+                                         else self.collision_managers[obs_name]
+                        collision_mang.add_object(name=mesh_name, mesh=mesh) #TODO: transform=geom.xmat + geom.xpos
 
-    # Init ball
-    mink.move_entity_to_entity(ball, robot.get_link(BALL_NAME))
+        # Collision avoidance limit
+        self.limits.append(mink.CollisionAvoidanceLimit(
+            entity = self.system,
+            model = self.system_model,
+            collision_managers = self.collision_managers,
+            collision_pairs = self.collision_pairs,
+            minimum_distance_from_collisions = 0.1,
+            collision_detection_distance = 0.2,
+        ))
+        """
 
-    # Start exec loop
-    rate = RateLimiter(frequency=100.0, warn=False)
-    i = 0
-    T_ee = None
-    while scene.viewer.is_alive():
+    def update_tasks(self):
+        self._update_task_ee()
+        self._update_task_fingers()
+
+    def _update_task_ee(self):
         # Update kuka end-effector task, as [target]'s SE3
-        T_wt = mink.SE3.from_entity(ee_target)
-        end_effector_task.set_target(T_wt)
+        T_wt = mink.SE3.from_entity(self.ee_target)
+        self.ee_task.set_target(T_wt)
 
-        # Update finger tasks' targets, relative SE3 from [fingertip] to [palm]
-        for fingertip, task in finger_tasks.items():
-            finger_target = finger_targets[fingertip]
-            T_pm = configuration.get_transform(finger_target, palm)
+    def _update_task_fingers(self):
+        # Update finger-tasks' targets, relative SE3 from [fingertip] to [palm]
+        T_ee = mink.SE3()
+        for fingertip, task in self.finger_tasks.items():
+            finger_target = self.finger_targets[fingertip]
+            T_pm = self.configuration.get_transform(finger_target, self.palm)
             task.set_target(T_pm)
 
             # Move [EE] -> also moving finger_targets
             # Calc [T], delta SE3 from current EE to prev EE (hand_base)
-            T_ee = configuration.get_transform_frame_to_world(hand_base)
-            dT = T_ee @ T_ee_prev.inverse()
+            T_ee = self.configuration.get_transform_frame_to_world(self.hand_base)
+            deltaT = T_ee @ self.T_ee_prev.inverse()
 
             # Calc [T_finger_target], current fingertip-target's SE3
-            T_finger_target = configuration.get_transform_frame_to_world(finger_target)
+            T_finger_target = self.configuration.get_transform_frame_to_world(finger_target)
 
             # Calc [T_finger_target_new], new expected fingertip-target mocap-body's SE3,
             # moving them to new poses
-            T_finger_target_new = dT @ T_finger_target
+            T_finger_target_new = deltaT @ T_finger_target
             mink.move_entity_to_frame(finger_target,
                                       T_finger_target_new.translation(), T_finger_target_new.rotation().wxyz)
 
-        # Compute velocity and integrate into the next configuration.
-        vel = mink.solve_ik(robot,
-                            configuration, tasks, rate.dt, solver, 1e-3, limits=limits
-                            )
-        configuration.apply_ctrl(entity=robot, velocity=vel, dt=rate.dt, ctrl_type=gs.CTRL_MODE.VELOCITY)
+        # Save latest [T_ee]
+        self.T_ee_prev = T_ee.copy()
 
-        # Move [target] to new pose
-        i+=1
-        target_pos = center + np.array([np.cos(i / 360 * np.pi), np.sin(i / 360 * np.pi), 0]) * r
-        mink.move_entity_to_frame(ee_target, target_pos, target_quat)
+    def _init_targets(self):
+        # Init targets (ee_target + finger_targets)
+        mink.move_entity_to_frame(self.ee_target,
+                                  frame_pos=self.hand_base.get_pos(),
+                                  frame_quat=self.EE_TARGET_QUAT_DEFAULT)
+        for fingertip in self.FINGERTIP_NAMES:
+            mink.move_entity_to_entity(self.finger_targets[fingertip], self.finger_ends[fingertip])
+        self.T_ee_prev = self.configuration.get_transform_frame_to_world(self.hand_base)
 
-        # Save latest [T_eef]
-        T_ee_prev = T_ee.copy()
+    def update_targets(self):
+        self.targets_frame += 1
+        # Robot's [ee_target]
+        delta = self.targets_frame / 360 * np.pi
+        target_pos = (self.EE_TARGET_CENTER_DEFAULT +
+                      np.array([np.cos(delta), np.sin(delta), 0]) * self.EE_TARGET_MOVEMENT_RADIUS_DEFAULT)
+        mink.move_entity_to_frame(self.ee_target, target_pos, self.EE_TARGET_QUAT_DEFAULT)
 
-        # Visualize at fixed FPS
-        rate.sleep()
-        scene.step()
-        # End main exec loop
+class Iiwa14AllegroDiffIK:
+    ARM_NAME = "iiwa14"
+    HAND_NAME = "allegro"
+    BALL_NAME = "ball"
+    BALL_SIZE = 0.07
+
+    DT: float = 0
+
+    def __init__(self):
+        # Genesis scene
+        self.scene: gs.Scene = None
+
+        # Model building
+        self.arm_spec: mj.MjSpec = None
+        self.hand_spec: mj.MjSpec = None
+        self.palm_spec: mj.MjSpec = None
+
+        # Entities
+        self.plane: RigidEntity = None
+        self.iiwa14_allegro: Iiwa14Allegro = None
+        self.ball: RigidEntity = None
+
+        # Control loop
+        self.rate: RateLimiter = None
+
+        # Solver
+        self.solver_name: str = "quadprog"
+
+    def construct_robot_system_model(self):
+        # https://github.com/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
+        self.arm_spec = mj.MjSpec.from_file(Iiwa14Allegro.ARM_XML.as_posix())
+        print(self.arm_spec.modelname)
+        Iiwa14Allegro.ARM_BODIES_NAMES = [body.name for body in self.arm_spec.bodies]
+
+        self.hand_spec = mj.MjSpec.from_file(Iiwa14Allegro.HAND_XML.as_posix())
+        Iiwa14Allegro.HAND_NAME = self.hand_spec.modelname
+        Iiwa14Allegro.ATTACH_PREFIX = f"{Iiwa14Allegro.HAND_NAME}/"
+        Iiwa14Allegro.PALM_NAME = f"{Iiwa14Allegro.ATTACH_PREFIX}palm"
+        self.palm_spec = self.hand_spec.worldbody.find_child("palm")
+        self.palm_spec.quat = BaseSystem.IDENTITY_WXYZ
+        self.palm_spec.pos = (0, 0, 0.095)
+
+        Iiwa14Allegro.FINGERTIP_NAMES = [f"{Iiwa14Allegro.ATTACH_PREFIX}{ftip}" for ftip in Iiwa14Allegro.HAND_FINGERTIP_NAMES]
+        Iiwa14Allegro.FINGERTIP_COLORS = {
+            Iiwa14Allegro.FINGERTIP_NAMES[0]: [0.9, 0, 0, 1],  # Red
+            Iiwa14Allegro.FINGERTIP_NAMES[1]: [0, 0.9, 0, 1],  # Green
+            Iiwa14Allegro.FINGERTIP_NAMES[2]: [0, 0, 0.9, 1],  # Blue
+            Iiwa14Allegro.FINGERTIP_NAMES[3]: [0.9, 0.9, 0.9, 1]  # White
+        }
+
+        # Add fingertip-end bodies from sites (since Genesis does not build site info from MJ model)
+        for fingertip in Iiwa14Allegro.HAND_FINGERTIP_NAMES:
+            fingertip_site = self.hand_spec.find_site(fingertip)
+            self.hand_spec.find_body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
+                                                         quat=fingertip_site.quat)
+
+        # Attach [hand_spec] to [arm_spec]
+        attach_site = self.arm_spec.find_site("attachment_site")
+        attach_site.attach(self.hand_spec, Iiwa14Allegro.ATTACH_PREFIX)
+
+        # TODO: Remove prev "home" key from arm_spec once MuJoCo releases [rem_key] API
+        #self.arm_spec.add_key(name="home", qpos=self.HOME_QPOS)
+
+        return self.arm_spec.compile(), self.arm_spec
+
+    def run(self):
+        ########################## init ##########################
+        gs.init(seed=0, precision="32", backend=gs.cpu, logging_level=None)
+
+        # Rate
+        self.rate = RateLimiter(frequency=100.0, warn=False)
+        self.DT = self.rate.dt
+
+        ########################## create a scene ################
+        self.scene = gs.Scene(
+            sim_options=gs.options.SimOptions(dt=self.rate.dt),
+            viewer_options=gs.options.ViewerOptions(
+                camera_pos=(0.0, -2, 1.5),
+                camera_lookat=(0.0, 0.0, 0.5),
+                camera_fov=40,
+                max_FPS=200,
+            ),
+            show_viewer=args.vis,
+            show_FPS=True,
+            rigid_options=gs.options.RigidOptions(
+                enable_joint_limit=True,
+                enable_collision=True,
+                enable_self_collision=False,
+                gravity=(0, 0, -0),
+            ),
+        )
+
+        ########################## entities #######################
+        self.plane = self.scene.add_entity(
+            morph=gs.morphs.Plane()
+        )
+
+        # Robot System
+        iiwa14_allegro_model, iiwa14_allegro_spec = self.construct_robot_system_model()
+        # save_model_spec(iiwa14_allegro_spec)
+        self.iiwa14_allegro = Iiwa14Allegro(self.scene, iiwa14_allegro_model, iiwa14_allegro_spec,
+                                            system_name=iiwa14_allegro_spec.modelname,
+                                            system_xml_path=Iiwa14Allegro.IIWA14_ALLEGRO_XML.as_posix())
+        self.iiwa14_allegro.OBSTACLE_NAMES = [self.BALL_NAME]
+
+        # Ball
+        self.ball = self.scene.add_entity(
+            name=Iiwa14AllegroDiffIK.BALL_NAME,
+            morph=gs.morphs.Sphere(radius=Iiwa14AllegroDiffIK.BALL_SIZE, pos=(0.5, 0, 0.3), fixed=True, collision=False)
+        )
+
+        ########################## build genesis scene #############
+        self.scene.build()
+
+        if self.scene.sim.rigid_solver.is_active():
+            batch_idx = 0  # only visualize contact for the first scene
+            for i_con in range(self.scene.sim.rigid_solver.collider.n_contacts[batch_idx]):
+                contact_data = self.scene.sim.rigid_solver.collider.contact_data[i_con, batch_idx]
+                print(contact_data)
+                contact_pos = np.array(contact_data.pos) + self.scene.envs_offset[batch_idx]
+                # contact_data.force
+
+        ########################## init robot system ###################
+        self.iiwa14_allegro.init()
+
+        ####################### exec ##############################
+        while self.scene.viewer.is_alive():
+            # 1- Update robot's tasks
+            self.iiwa14_allegro.update_tasks()
+
+            # 2- Update robot's [ee_target, finger_targets]
+            self.iiwa14_allegro.update_targets()
+
+            # 3- Compute velocity and integrate into the next configuration.
+            vel = mink.solve_ik(self.iiwa14_allegro.system,
+                                self.iiwa14_allegro.configuration, self.iiwa14_allegro.tasks, self.rate.dt,
+                                self.solver_name, damping=1e-3,
+                                limits=self.iiwa14_allegro.limits)
+            # position-control
+            self.iiwa14_allegro.configuration.apply_ctrl(entity=self.iiwa14_allegro.system,
+                                                         ctrl=self.iiwa14_allegro.configuration.integrate(
+                                                                self.iiwa14_allegro.system, vel, self.rate.dt),
+                                                         ctrl_type=gs.CTRL_MODE.POSITION)
+
+            # Visualize at fixed FPS
+            self.scene.step()
+            self.iiwa14_allegro.step()
+            self.rate.sleep()
+            # End main exec loop
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--vis", action="store_true", default=False)
+    args = parser.parse_args()
+
+    diffIk = Iiwa14AllegroDiffIK()
+    diffIk.run()

@@ -311,6 +311,8 @@ def tensor_to_cpu(x):
 def tensor_to_array(x: torch.Tensor, dtype: Type[np.generic] | None = None) -> np.ndarray:
     return np.asarray(tensor_to_cpu(x), dtype=dtype)
 
+def tensor_inf_with_scalar(x, scalar):
+    return torch.where(torch.isinf(x), torch.tensor(scalar, dtype=x.dtype, device=x.device), x)
 
 def is_approx_multiple(a, b, tol=1e-7):
     return abs(a % b) < tol or abs(b - (a % b)) < tol

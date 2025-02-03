@@ -42,29 +42,29 @@ class RigidEntity(Entity):
     _solver: "RigidSolver"
 
     def __init__(
-        self,
-        scene: "Scene",
+            self,
+            scene: "Scene",
         solver: "RigidSolver",
-        material: Material,
-        morph: Morph,
-        surface: Surface,
-        idx: int,
-        idx_in_solver,
+            material: Material,
+            morph: Morph,
+            surface: Surface,
+            idx: int,
+            idx_in_solver,
         link_start: int = 0,
         joint_start: int = 0,
-        q_start=0,
-        dof_start=0,
-        geom_start=0,
-        cell_start=0,
-        vert_start=0,
-        free_verts_state_start=0,
-        fixed_verts_state_start=0,
-        face_start=0,
-        edge_start=0,
-        vgeom_start=0,
-        vvert_start=0,
-        vface_start=0,
-        equality_start=0,
+            q_start=0,
+            dof_start=0,
+            geom_start=0,
+            cell_start=0,
+            vert_start=0,
+            free_verts_state_start=0,
+            fixed_verts_state_start=0,
+            face_start=0,
+            edge_start=0,
+            vgeom_start=0,
+            vvert_start=0,
+            vface_start=0,
+            equality_start=0,
         visualize_contact: bool = False,
     ):
         super().__init__(idx, scene, morph, solver, material, surface)
@@ -343,7 +343,7 @@ class RigidEntity(Entity):
         # First, it would happen when loading visual meshes having supported format (i.e. Collada files '.dae').
         # Second, it does not take into account URDF 'mimic' joint constraints. However, it does a better job at
         # initialized undetermined physics parameters.
-        if isinstance(morph, gs.morphs.MJCF) or isistance(morph, gs.morphs.MuJoCoMorph):
+        if isinstance(morph, gs.morphs.MJCF) or isinstance(morph, gs.morphs.MuJoCoMorph):
             # Mujoco's unified MJCF+URDF parser systematically for MJCF files
             l_infos, links_j_infos, links_g_infos, eqs_info = mju.parse_xml(morph, surface, mj_model)
         else:
@@ -394,17 +394,17 @@ class RigidEntity(Entity):
 
         # Add free floating joint at root if necessary
         if (
-            (isinstance(morph, gs.morphs.Drone) or (isinstance(morph, gs.morphs.URDF) and not morph.fixed))
-            and links_j_infos
-            and sum(j_info["n_dofs"] for j_info in links_j_infos[0]) == 0
+                (isinstance(morph, gs.morphs.Drone) or (isinstance(morph, gs.morphs.URDF) and not morph.fixed))
+                and links_j_infos
+                and sum(j_info["n_dofs"] for j_info in links_j_infos[0]) == 0
         ):
             # Select the second joint down the kinematic tree if possible without messing up with fixed links to keep
             root_idx = 0
             for idx, (l_info, link_j_infos) in tuple(enumerate(zip(l_infos, links_j_infos)))[:2]:
                 if (
-                    l_info["name"] not in morph.links_to_keep
-                    and l_info["parent_idx"] in (0, -1)
-                    and sum(j_info["n_dofs"] for j_info in link_j_infos) == 0
+                        l_info["name"] not in morph.links_to_keep
+                        and l_info["parent_idx"] in (0, -1)
+                        and sum(j_info["n_dofs"] for j_info in link_j_infos) == 0
                 ):
                     root_idx = idx
                     continue
@@ -474,8 +474,8 @@ class RigidEntity(Entity):
         is_inertia_invalid = False
         for l_info, link_j_infos in zip(l_infos, links_j_infos):
             if not all(j_info["type"] == gs.JOINT_TYPE.FIXED for j_info in link_j_infos) and (
-                (l_info.get("inertial_mass") is None or l_info["inertial_mass"] <= 0.0)
-                or (l_info.get("inertial_i") is None or np.diag(l_info["inertial_i"]) <= 0.0).any()
+                    (l_info.get("inertial_mass") is None or l_info["inertial_mass"] <= 0.0)
+                    or (l_info.get("inertial_i") is None or np.diag(l_info["inertial_i"]) <= 0.0).any()
             ):
                 if l_info.get("inertial_mass") is not None or l_info.get("inertial_i") is not None:
                     gs.logger.debug(
@@ -674,9 +674,9 @@ class RigidEntity(Entity):
 
             sol_params = np.array(j_info.get("sol_params", gu.default_solver_params()), copy=True)
             if (
-                len(sol_params.shape) == 2
-                and sol_params.shape[0] == 1
-                and (sol_params[0][3] >= 1.0 or sol_params[0][2] >= sol_params[0][3])
+                    len(sol_params.shape) == 2
+                    and sol_params.shape[0] == 1
+                    and (sol_params[0][3] >= 1.0 or sol_params[0][2] >= sol_params[0][3])
             ):
                 gs.logger.warning(
                     f"Joint {j_info['name']}'s sol_params {sol_params[0]} look not right, change to default."
@@ -1064,23 +1064,23 @@ class RigidEntity(Entity):
 
     @gs.assert_built
     def inverse_kinematics(
-        self,
-        link,
-        pos=None,
-        quat=None,
-        init_qpos=None,
-        respect_joint_limit=True,
-        max_samples=50,
-        max_solver_iters=20,
-        damping=0.01,
-        pos_tol=5e-4,  # 0.5 mm
-        rot_tol=5e-3,  # 0.28 degree
-        pos_mask=[True, True, True],
-        rot_mask=[True, True, True],
-        max_step_size=0.5,
-        dofs_idx_local=None,
-        return_error=False,
-        envs_idx=None,
+            self,
+            link,
+            pos=None,
+            quat=None,
+            init_qpos=None,
+            respect_joint_limit=True,
+            max_samples=50,
+            max_solver_iters=20,
+            damping=0.01,
+            pos_tol=5e-4,  # 0.5 mm
+            rot_tol=5e-3,  # 0.28 degree
+            pos_mask=[True, True, True],
+            rot_mask=[True, True, True],
+            max_step_size=0.5,
+            dofs_idx_local=None,
+            return_error=False,
+            envs_idx=None,
     ):
         """
         Compute inverse kinematics for a single target link.
@@ -1165,23 +1165,23 @@ class RigidEntity(Entity):
 
     @gs.assert_built
     def inverse_kinematics_multilink(
-        self,
-        links,
-        poss=None,
-        quats=None,
-        init_qpos=None,
-        respect_joint_limit=True,
-        max_samples=50,
-        max_solver_iters=20,
-        damping=0.01,
-        pos_tol=5e-4,  # 0.5 mm
-        rot_tol=5e-3,  # 0.28 degree
-        pos_mask=[True, True, True],
-        rot_mask=[True, True, True],
-        max_step_size=0.5,
-        dofs_idx_local=None,
-        return_error=False,
-        envs_idx=None,
+            self,
+            links,
+            poss=None,
+            quats=None,
+            init_qpos=None,
+            respect_joint_limit=True,
+            max_samples=50,
+            max_solver_iters=20,
+            damping=0.01,
+            pos_tol=5e-4,  # 0.5 mm
+            rot_tol=5e-3,  # 0.28 degree
+            pos_mask=[True, True, True],
+            rot_mask=[True, True, True],
+            max_step_size=0.5,
+            dofs_idx_local=None,
+            return_error=False,
+            envs_idx=None,
     ):
         """
         Compute inverse kinematics for  multiple target links.
@@ -1425,13 +1425,13 @@ class RigidEntity(Entity):
 
     @ti.kernel
     def _kernel_forward_kinematics(
-        self,
-        links_pos: ti.types.ndarray(),
-        links_quat: ti.types.ndarray(),
-        qpos: ti.types.ndarray(),
-        qs_idx: ti.types.ndarray(),
-        links_idx: ti.types.ndarray(),
-        envs_idx: ti.types.ndarray(),
+            self,
+            links_pos: ti.types.ndarray(),
+            links_quat: ti.types.ndarray(),
+            qpos: ti.types.ndarray(),
+            qs_idx: ti.types.ndarray(),
+            links_idx: ti.types.ndarray(),
+            envs_idx: ti.types.ndarray(),
         links_state: array_class.LinksState,
         links_info: array_class.LinksInfo,
         joints_state: array_class.JointsState,
@@ -1850,12 +1850,12 @@ class RigidEntity(Entity):
 
     @gs.assert_built
     def get_links_vel(
-        self,
-        links_idx_local=None,
-        envs_idx=None,
-        *,
-        ref: Literal["link_origin", "link_com"] = "link_origin",
-        unsafe=False,
+            self,
+            links_idx_local=None,
+            envs_idx=None,
+            *,
+            ref: Literal["link_origin", "link_com"] = "link_origin",
+            unsafe=False,
     ):
         """
         Returns linear velocity of all the entity's links expressed at a given reference position in world coordinates.
@@ -2482,6 +2482,18 @@ class RigidEntity(Entity):
         """
         dofs_idx = self._get_idx(dofs_idx_local, self.n_dofs, self._dof_start, unsafe=True)
         return self._solver.get_dofs_limit(dofs_idx, envs_idx, unsafe=unsafe)
+
+    @gs.assert_built
+    def get_dofs_limit_numpy(self, dofs_idx_local=None, envs_idx=None):
+        limits = self.get_dofs_limit(dofs_idx_local, envs_idx)
+        if not len(limits[0]):
+            return np.array([])
+        lower = tensor_inf_with_scalar(limits[0], -1).cpu().numpy()
+        upper = tensor_inf_with_scalar(limits[1], 1).cpu().numpy()
+        dofs_limit = np.empty((len(limits[0]), 2), dtype=float)
+        dofs_limit[:len(lower), 0] = lower
+        dofs_limit[:len(upper), 1] = upper
+        return dofs_limit
 
     @gs.assert_built
     def get_dofs_stiffness(self, dofs_idx_local=None, envs_idx=None, *, unsafe=False):
