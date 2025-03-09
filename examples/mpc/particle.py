@@ -9,7 +9,7 @@ from mink.mjpc import predictive_sampling
 
 # genesis
 import genesis as gs
-from genesis.controller import mink
+from genesis.controller import gink
 from genesis.engine.entities.rigid_entity import RigidEntity
 from genesis.controller import mjpc
 from genesis.controller.mjpc import predictive_sampling
@@ -69,7 +69,7 @@ def reset(model: mj.MjModel, entities: list[RigidEntity]) -> None:
     # move target
     i += 1
     target_pos = center + np.array([np.cos(i / 360 * np.pi), np.sin(i / 360 * np.pi), 0]) * R
-    mink.move_entity_to_frame(target, target_pos, target_quat)
+    gink.move_entity_to_frame(target, target_pos, target_quat)
 
 def construct_main_model():
     # model
@@ -194,9 +194,9 @@ def main():
 
     ########################## exec #############################
     # Init particle, target
-    mink.move_entity_to_frame(particle, np.array([0.0, 0.25, INIT_Z]))
-    mink.move_entity_to_frame(ghost_particle, np.array([0.25, 0.25, INIT_Z]))
-    mink.move_entity_to_frame(target, np.array([0.25, 0.0, INIT_Z]))
+    gink.move_entity_to_frame(particle, np.array([0.0, 0.25, INIT_Z]))
+    gink.move_entity_to_frame(ghost_particle, np.array([0.25, 0.25, INIT_Z]))
+    gink.move_entity_to_frame(target, np.array([0.25, 0.0, INIT_Z]))
 
     # verbose
     VERBOSE = False

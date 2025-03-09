@@ -7,7 +7,7 @@ import mujoco as mj
 from loop_rate_limiters import RateLimiter
 
 import genesis as gs
-from genesis.controller import mink
+from genesis.controller import gink
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 from genesis.controller import mjpc
 from genesis.controller.mjpc import predictive_sampling
@@ -239,7 +239,7 @@ def main():
     ########################## exec #############################
     # Init the targets (finger_targets)
     for fingertip in FINGERTIP_NAMES:
-        mink.move_entity_to_entity(finger_targets[fingertip], finger_ends[fingertip])
+        gink.move_entity_to_entity(finger_targets[fingertip], finger_ends[fingertip])
 
     # verbose
     VERBOSE = False
@@ -253,7 +253,7 @@ def main():
 
         # set ctrl to action from policy
         apply_ctrl([hand], planner.ctrl_from_policy(rate.next_tick))
-        mink.move_entity_to_frame(cube, frame_pos=CUBE_INIT_POS)
+        gink.move_entity_to_frame(cube, frame_pos=CUBE_INIT_POS)
 
         # reward
         rewards.append(reward(main_model, [hand, cube, goal_cube]))

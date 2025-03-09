@@ -54,13 +54,15 @@ class Task(abc.ABC):
     def __init__(
         self,
         name: str,
-        cost: np.ndarray,
+        k: int = 0,
+        cost: np.ndarray = (),
         gain: float = 1.0,
-        lm_damping: float = 0.0,
+        lm_damping: float = 0.0
     ):
         """Constructor.
 
         Args:
+            k: Active dof nums
             cost: Cost vector with the same dimension as the error of the task.
             gain: Task gain alpha in [0, 1] for additional low-pass filtering. Defaults
                 to 1.0 (no filtering) for dead-beat control.
@@ -76,6 +78,7 @@ class Task(abc.ABC):
             raise InvalidDamping("`lm_damping` must be >= 0")
 
         self.name = name
+        self.k = k
         self.cost = cost
         self.gain = gain
         self.lm_damping = lm_damping

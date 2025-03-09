@@ -451,6 +451,7 @@ class Scene(RBC):
 
         entity = self._sim._add_entity(morph, material, surface, visualize_contact, name)
 
+        entity = self._sim._add_entity(name, morph, material, surface, visualize_contact)
         return entity
 
     @gs.assert_unbuilt
