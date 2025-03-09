@@ -1,4 +1,4 @@
-"""Exceptions specific to mink."""
+"""Exceptions specific to gink."""
 
 from typing import Sequence
 

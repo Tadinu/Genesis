@@ -14,9 +14,9 @@ def move_entity_to_frame(
     frame_pos: np.ndarray,
     frame_quat: np.ndarray = (1, 0, 0, 0)
 ) -> None:
-    #entity.set_qpos(np.concatenate([frame_pos, frame_quat]))
-    entity.set_pos(frame_pos)
-    entity.set_quat(frame_quat)
+    entity.set_qpos(np.concatenate([frame_pos, frame_quat]))
+    #entity.set_pos(frame_pos)
+    #entity.set_quat(frame_quat)
 
 def move_entity_to_entity(
     entity_1: RigidEntity,
