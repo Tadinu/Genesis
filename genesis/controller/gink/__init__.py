@@ -1,4 +1,4 @@
-"""mink: MuJoCo inverse kinematics."""
+"""gink: MuJoCo inverse kinematics."""
 
 from .configuration import Configuration
 from .constants import (

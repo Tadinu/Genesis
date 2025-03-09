@@ -12,7 +12,7 @@ from .limit import Constraint, Limit
 
 # Genesis
 from genesis.engine.entities.rigid_entity import RigidEntity
-from genesis.ext.trimesh.collision import CollisionManager, ContactData
+from trimesh.collision import CollisionManager, ContactData
 
 # Type aliases.
 CollisionPair = tuple[str, str]

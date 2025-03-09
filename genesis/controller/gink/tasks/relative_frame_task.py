@@ -10,13 +10,13 @@ import numpy.typing as npt
 from ..configuration import Configuration
 from ..lie import SE3
 from .exceptions import TargetNotSet, TaskDefinitionError
-from .task import Task
+from .frame_task import FrameTask
 
 # Genesis
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 
 
-class RelativeFrameTask(Task):
+class RelativeFrameTask(FrameTask):
     """Regulate the pose of a frame relative to another frame.
 
     Attributes:
@@ -26,7 +26,6 @@ class RelativeFrameTask(Task):
         transform_target_to_base: Target pose in the base frame.
     """
 
-    k: int = 6
     transform_target_to_base: Optional[SE3]
 
     def __init__(
@@ -39,45 +38,11 @@ class RelativeFrameTask(Task):
         gain: float = 1.0,
         lm_damping: float = 0.0,
     ):
-        super().__init__(name=f"RelativeFrameTask_{entity.name}_{frame.name}_{base.name}",
-                         cost=np.zeros((self.k,)), gain=gain, lm_damping=lm_damping)
-        self.entity = entity
-        self.frame = frame
+        super().__init__(entity=entity, frame=frame, position_cost=position_cost, orientation_cost=orientation_cost,
+                         gain=gain, lm_damping=lm_damping)
+        self.name = f"RelativeFrameTask_{entity.name}_{frame.name}_{base.name}",
         self.base = base
-        self.position_cost = position_cost
-        self.orientation_cost = orientation_cost
         self.transform_target_to_base = None
-
-        self.set_position_cost(position_cost)
-        self.set_orientation_cost(orientation_cost)
-
-    def set_position_cost(self, position_cost: npt.ArrayLike) -> None:
-        position_cost = np.atleast_1d(position_cost)
-        if position_cost.ndim != 1 or position_cost.shape[0] not in (1, 3):
-            raise TaskDefinitionError(
-                f"{self.__class__.__name__} position cost should be a vector of shape "
-                "1 (aka identical cost for all coordinates) or (3,) but got "
-                f"{position_cost.shape}"
-            )
-        if not np.all(position_cost >= 0.0):
-            raise TaskDefinitionError(
-                f"{self.__class__.__name__} position cost should be >= 0"
-            )
-        self.cost[:3] = position_cost
-
-    def set_orientation_cost(self, orientation_cost: npt.ArrayLike) -> None:
-        orientation_cost = np.atleast_1d(orientation_cost)
-        if orientation_cost.ndim != 1 or orientation_cost.shape[0] not in (1, 3):
-            raise TaskDefinitionError(
-                f"{self.__class__.__name__} orientation cost should be a vector of "
-                "shape 1 (aka identical cost for all coordinates) or (3,) but got "
-                f"{orientation_cost.shape}"
-            )
-        if not np.all(orientation_cost >= 0.0):
-            raise TaskDefinitionError(
-                f"{self.__class__.__name__} position cost should be >= 0"
-            )
-        self.cost[3:] = orientation_cost
 
     def set_target(self, transform_target_to_base: SE3) -> None:
         """Set the target pose in the base frame.
