@@ -8,15 +8,17 @@ import mujoco as mj
 from loop_rate_limiters import RateLimiter
 
 import genesis as gs
-from genesis.controller import mink
+from genesis.controller import gink
 from genesis.options import SimOptions
 from genesis.options.morphs import Primitive
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
-from genesis.ext import trimesh
-from genesis.ext.trimesh.collision import CollisionManager
+import trimesh
+from trimesh.collision import CollisionManager
 from genesis.system.base_system import BaseSystem
+from genesis.utils.misc import print_class
 
 _HERE = Path(__file__).parent
+
 
 class Iiwa14Allegro(BaseSystem):
     ARM_XML = _HERE / "kuka_iiwa_14" / "scene.xml"
@@ -54,16 +56,16 @@ class Iiwa14Allegro(BaseSystem):
         super().__init__(scene, system_model, system_spec, system_name, system_xml_path,
                          pos, quat, q0=Iiwa14Allegro.HOME_QPOS,
                          gravity_compensation=gravity_compensation, collision=collision)
-        self.ee_task: mink.FrameTask = None
-        self.posture_task: mink.Task = None
+        self.ee_task: gink.FrameTask = None
+        self.posture_task: gink.Task = None
         self.ee_target: RigidEntity = None
-        self.finger_tasks: dict[str, mink.RelativeFrameTask] = None
+        self.finger_tasks: dict[str, gink.RelativeFrameTask] = None
         self.finger_ends: dict[str, RigidLink] = {}
         self.finger_targets: dict[str, RigidEntity] = {}
         self.plane: Primitive = None
         self.palm: RigidLink = None
         self.hand_base: RigidLink = None
-        self.T_ee_prev: mink.SE3 = None
+        self.T_ee_prev: gink.SE3 = None
         self.N_DOFS = Iiwa14Allegro.ARM_DOFS_NO + Iiwa14Allegro.HAND_DOFS_NO
 
         # 1- EE (hand base)
@@ -116,7 +118,7 @@ class Iiwa14Allegro(BaseSystem):
 
     def _config_tasks(self):
         # EE task
-        self.ee_task = mink.FrameTask(
+        self.ee_task = gink.FrameTask(
             entity=self.system,
             frame=self.hand_base,
             position_cost=1.0,
@@ -125,13 +127,13 @@ class Iiwa14Allegro(BaseSystem):
         )
 
         # Posture task
-        self.posture_task = mink.PostureTask(entity=self.system, model=self.system_model, cost=5e-2)
+        self.posture_task = gink.PostureTask(entity=self.system, model=self.system_model, cost=5e-2)
         self.posture_task.set_target(self.system.get_qpos().cpu().numpy())
 
         # Finger tasks
         self.finger_tasks = {}
         for fingertip in self.FINGERTIP_NAMES:
-            task = mink.RelativeFrameTask(
+            task = gink.RelativeFrameTask(
                 entity=self.system,
                 frame=self.finger_ends[fingertip],
                 base=self.palm,
@@ -147,14 +149,14 @@ class Iiwa14Allegro(BaseSystem):
     def _config_limits(self):
         # Joint limits
         self.limits = [
-            mink.ConfigurationLimit(entity=self.system, model=self.system_model),
+            gink.ConfigurationLimit(entity=self.system, model=self.system_model),
         ]
-        """
-        self.collision_pairs = [] #[(Iiwa14Allegro.ARM_NAME, Iiwa14Allegro.HAND_NAME)]
+
+        self.collision_pairs = []
         for obs_name in self.OBSTACLE_NAMES:
             self.collision_managers[obs_name] = CollisionManager()
             self.collision_pairs.extend([(self.ARM_NAME, obs_name),
-                                         (self.HAND_NAME, obs_name)])
+                                         (self.PALM_NAME, obs_name)])
 
         # Collision managers
         for collision_pair in self.collision_pairs:
@@ -194,22 +196,25 @@ class Iiwa14Allegro(BaseSystem):
                         mesh = trimesh.primitives.Box(extents=geom.size)
 
                 if mesh:
-                    for obs_name in len(self.OBSTACLE_NAMES):
-                        collision_mang = self.collision_managers[self.ARM_NAME] if body.name in Iiwa14Allegro.ARM_BODIES_NAMES \
-                                         else self.collision_managers[self.HAND_NAME] if body.name.startswith(Iiwa14Allegro.ATTACH_PREFIX) \
-                                         else self.collision_managers[obs_name]
-                        collision_mang.add_object(name=mesh_name, mesh=mesh) #TODO: transform=geom.xmat + geom.xpos
+                    for obs_name in self.OBSTACLE_NAMES:
+                        collision_mang = self.collision_managers[
+                            self.ARM_NAME] if body.name in Iiwa14Allegro.ARM_BODIES_NAMES \
+                            else self.collision_managers[self.PALM_NAME] if body.name.startswith(
+                            Iiwa14Allegro.ATTACH_PREFIX) \
+                            else self.collision_managers[obs_name] if obs_name in self.collision_managers else None
+                        if collision_mang:
+                            collision_mang.add_object(name=mesh_name,
+                                                      mesh=mesh)  # TODO: transform=geom.xmat + geom.xpos
 
         # Collision avoidance limit
-        self.limits.append(mink.CollisionAvoidanceLimit(
-            entity = self.system,
-            model = self.system_model,
-            collision_managers = self.collision_managers,
-            collision_pairs = self.collision_pairs,
-            minimum_distance_from_collisions = 0.1,
-            collision_detection_distance = 0.2,
+        self.limits.append(gink.CollisionAvoidanceLimit(
+            entity=self.system,
+            model=self.system_model,
+            collision_managers=self.collision_managers,
+            collision_pairs=self.collision_pairs,
+            minimum_distance_from_collisions=0.1,
+            collision_detection_distance=0.2,
         ))
-        """
 
     def update_tasks(self):
         self._update_task_ee()
@@ -217,12 +222,12 @@ class Iiwa14Allegro(BaseSystem):
 
     def _update_task_ee(self):
         # Update kuka end-effector task, as [target]'s SE3
-        T_wt = mink.SE3.from_entity(self.ee_target)
+        T_wt = gink.SE3.from_entity(self.ee_target)
         self.ee_task.set_target(T_wt)
 
     def _update_task_fingers(self):
         # Update finger-tasks' targets, relative SE3 from [fingertip] to [palm]
-        T_ee = mink.SE3()
+        T_ee = gink.SE3()
         for fingertip, task in self.finger_tasks.items():
             finger_target = self.finger_targets[fingertip]
             T_pm = self.configuration.get_transform(finger_target, self.palm)
@@ -239,7 +244,7 @@ class Iiwa14Allegro(BaseSystem):
             # Calc [T_finger_target_new], new expected fingertip-target mocap-body's SE3,
             # moving them to new poses
             T_finger_target_new = deltaT @ T_finger_target
-            mink.move_entity_to_frame(finger_target,
+            gink.move_entity_to_frame(finger_target,
                                       T_finger_target_new.translation(), T_finger_target_new.rotation().wxyz)
 
         # Save latest [T_ee]
@@ -247,11 +252,11 @@ class Iiwa14Allegro(BaseSystem):
 
     def _init_targets(self):
         # Init targets (ee_target + finger_targets)
-        mink.move_entity_to_frame(self.ee_target,
+        gink.move_entity_to_frame(self.ee_target,
                                   frame_pos=self.hand_base.get_pos(),
                                   frame_quat=self.EE_TARGET_QUAT_DEFAULT)
         for fingertip in self.FINGERTIP_NAMES:
-            mink.move_entity_to_entity(self.finger_targets[fingertip], self.finger_ends[fingertip])
+            gink.move_entity_to_entity(self.finger_targets[fingertip], self.finger_ends[fingertip])
         self.T_ee_prev = self.configuration.get_transform_frame_to_world(self.hand_base)
 
     def update_targets(self):
@@ -260,7 +265,8 @@ class Iiwa14Allegro(BaseSystem):
         delta = self.targets_frame / 360 * np.pi
         target_pos = (self.EE_TARGET_CENTER_DEFAULT +
                       np.array([np.cos(delta), np.sin(delta), 0]) * self.EE_TARGET_MOVEMENT_RADIUS_DEFAULT)
-        mink.move_entity_to_frame(self.ee_target, target_pos, self.EE_TARGET_QUAT_DEFAULT)
+        gink.move_entity_to_frame(self.ee_target, target_pos, self.EE_TARGET_QUAT_DEFAULT)
+
 
 class Iiwa14AllegroDiffIK:
     ARM_NAME = "iiwa14"
@@ -268,7 +274,7 @@ class Iiwa14AllegroDiffIK:
     BALL_NAME = "ball"
     BALL_SIZE = 0.07
 
-    DT: float = 0
+    DT: float = 0.01
 
     def __init__(self):
         # Genesis scene
@@ -292,6 +298,7 @@ class Iiwa14AllegroDiffIK:
 
     def construct_robot_system_model(self):
         # https://github.com/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
+        # https://mujoco.readthedocs.io/en/latest/python.html#construction
         self.arm_spec = mj.MjSpec.from_file(Iiwa14Allegro.ARM_XML.as_posix())
         print(self.arm_spec.modelname)
         Iiwa14Allegro.ARM_BODIES_NAMES = [body.name for body in self.arm_spec.bodies]
@@ -304,7 +311,8 @@ class Iiwa14AllegroDiffIK:
         self.palm_spec.quat = BaseSystem.IDENTITY_WXYZ
         self.palm_spec.pos = (0, 0, 0.095)
 
-        Iiwa14Allegro.FINGERTIP_NAMES = [f"{Iiwa14Allegro.ATTACH_PREFIX}{ftip}" for ftip in Iiwa14Allegro.HAND_FINGERTIP_NAMES]
+        Iiwa14Allegro.FINGERTIP_NAMES = [f"{Iiwa14Allegro.ATTACH_PREFIX}{ftip}" for ftip in
+                                         Iiwa14Allegro.HAND_FINGERTIP_NAMES]
         Iiwa14Allegro.FINGERTIP_COLORS = {
             Iiwa14Allegro.FINGERTIP_NAMES[0]: [0.9, 0, 0, 1],  # Red
             Iiwa14Allegro.FINGERTIP_NAMES[1]: [0, 0.9, 0, 1],  # Green
@@ -314,16 +322,16 @@ class Iiwa14AllegroDiffIK:
 
         # Add fingertip-end bodies from sites (since Genesis does not build site info from MJ model)
         for fingertip in Iiwa14Allegro.HAND_FINGERTIP_NAMES:
-            fingertip_site = self.hand_spec.find_site(fingertip)
-            self.hand_spec.find_body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
-                                                         quat=fingertip_site.quat)
+            fingertip_site = self.hand_spec.site(fingertip)
+            self.hand_spec.body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
+                                                    quat=fingertip_site.quat)
 
         # Attach [hand_spec] to [arm_spec]
-        attach_site = self.arm_spec.find_site("attachment_site")
-        attach_site.attach(self.hand_spec, Iiwa14Allegro.ATTACH_PREFIX)
+        attach_site = self.arm_spec.site("attachment_site")
+        attach_site.attach_body(self.hand_spec.worldbody, Iiwa14Allegro.ATTACH_PREFIX)
 
         # TODO: Remove prev "home" key from arm_spec once MuJoCo releases [rem_key] API
-        #self.arm_spec.add_key(name="home", qpos=self.HOME_QPOS)
+        # self.arm_spec.add_key(name="home", qpos=self.HOME_QPOS)
 
         return self.arm_spec.compile(), self.arm_spec
 
@@ -332,8 +340,7 @@ class Iiwa14AllegroDiffIK:
         gs.init(seed=0, precision="32", backend=gs.cpu, logging_level=None)
 
         # Rate
-        self.rate = RateLimiter(frequency=100.0, warn=False)
-        self.DT = self.rate.dt
+        self.rate = RateLimiter(frequency=1 / Iiwa14AllegroDiffIK.DT, warn=False)
 
         ########################## create a scene ################
         self.scene = gs.Scene(
@@ -378,11 +385,31 @@ class Iiwa14AllegroDiffIK:
 
         if self.scene.sim.rigid_solver.is_active():
             batch_idx = 0  # only visualize contact for the first scene
-            for i_con in range(self.scene.sim.rigid_solver.collider.n_contacts[batch_idx]):
-                contact_data = self.scene.sim.rigid_solver.collider.contact_data[i_con, batch_idx]
-                print(contact_data)
-                contact_pos = np.array(contact_data.pos) + self.scene.envs_offset[batch_idx]
-                # contact_data.force
+            contacts_info = self.scene.sim.rigid_solver.collider.get_contacts()
+            if self.scene.sim.rigid_solver.n_envs > 0:
+                contacts_info = {key: value[batch_idx] for key, value in contacts_info.items()}
+
+                # Early return if no contact
+                n_contacts = len(contacts_info["geom_a"])
+                if n_contacts > 0:
+                    geoms_aabb = self.scene.sim.rigid_solver.geoms_init_AABB.to_numpy()
+                    ga_aabb = geoms_aabb[contacts_info["geom_a"]]
+                    gb_aabb = geoms_aabb[contacts_info["geom_b"]]
+                    ga_aabb_size = np.linalg.norm(ga_aabb[:, -1] - ga_aabb[:, 0], axis=1)
+                    gb_aabb_size = np.linalg.norm(gb_aabb[:, -1] - gb_aabb[:, 0], axis=1)
+                    normal_scale = np.minimum(ga_aabb_size, gb_aabb_size)
+
+                    contact_pos = contacts_info["position"] + self.scene.envs_offset[batch_idx]
+                    contact_normal_scaled = contacts_info["normal"] * normal_scale[:, None]
+                    contact_force = contacts_info["force"]
+                    print(contact_pos, contact_normal_scaled, contact_force)
+
+                    for i_c in range(n_contacts):
+                        for link_idx, sign in (
+                                (contacts_info["link_a"][i_c], -1),
+                                (contacts_info["link_b"][i_c], 1),
+                        ):
+                            print(link_idx, sign)
 
         ########################## init robot system ###################
         self.iiwa14_allegro.init()
@@ -396,21 +423,22 @@ class Iiwa14AllegroDiffIK:
             self.iiwa14_allegro.update_targets()
 
             # 3- Compute velocity and integrate into the next configuration.
-            vel = mink.solve_ik(self.iiwa14_allegro.system,
+            vel = gink.solve_ik(self.iiwa14_allegro.system,
                                 self.iiwa14_allegro.configuration, self.iiwa14_allegro.tasks, self.rate.dt,
                                 self.solver_name, damping=1e-3,
                                 limits=self.iiwa14_allegro.limits)
             # position-control
             self.iiwa14_allegro.configuration.apply_ctrl(entity=self.iiwa14_allegro.system,
                                                          ctrl=self.iiwa14_allegro.configuration.integrate(
-                                                                self.iiwa14_allegro.system, vel, self.rate.dt),
-                                                         ctrl_type=gs.CTRL_MODE.POSITION)
+                                                             self.iiwa14_allegro.system, vel, self.rate.dt),
+                                                         ctrl_mode=gs.CTRL_MODE.POSITION)
 
             # Visualize at fixed FPS
             self.scene.step()
             self.iiwa14_allegro.step()
             self.rate.sleep()
             # End main exec loop
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

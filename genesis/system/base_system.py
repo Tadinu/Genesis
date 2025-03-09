@@ -6,8 +6,8 @@ import numpy as np
 import mujoco as mj
 
 import genesis as gs
-from genesis.controller import mink
-from genesis.ext.trimesh.collision import CollisionManager
+from genesis.controller import gink
+from trimesh.collision import CollisionManager
 
 _HERE = Path(__file__).parent
 
@@ -30,9 +30,9 @@ class BaseSystem(abc.ABC):
         self.system_spec: mj.MjSpec = system_spec # containing pre-compiled model metadata, more easily accessible
         self.system_data: mj.MjData = mj.MjData(system_model) if use_mujoco_dynamics else None
         self.use_mujoco_dynamics: bool = use_mujoco_dynamics
-        self.configuration: mink.Configuration = None
-        self.tasks: dict[str, mink.Task] = None
-        self.limits: list[mink.Limit] = []
+        self.configuration: gink.Configuration = None
+        self.tasks: dict[str, gink.Task] = None
+        self.limits: list[gink.Limit] = []
         self.collision_pairs: dict[str, str] = {}
         self.collision_managers: dict[str, CollisionManager] = {}
         self.HOME_QPOS: list[float] = q0 if q0 else []
@@ -60,7 +60,7 @@ class BaseSystem(abc.ABC):
 
     def _setup(self) -> None:
         # Robot kinematics
-        self.configuration = mink.Configuration(model=self.system_model)
+        self.configuration = gink.Configuration(model=self.system_model)
         self.system.set_qpos(self.HOME_QPOS)
         if self.use_mujoco_dynamics:
             self.system_model.opt.timestep = self.scene.dt
@@ -86,7 +86,7 @@ class BaseSystem(abc.ABC):
     def _config_limits(self) -> None:
         # Joint limits
         self.limits = [
-            mink.ConfigurationLimit(entity=self.system, model=self.system_model)
+            gink.ConfigurationLimit(entity=self.system, model=self.system_model)
         ]
 
     @abc.abstractmethod
@@ -100,6 +100,6 @@ class BaseSystem(abc.ABC):
     def update_tasks(self) -> None:
         pass
 
-    def step_mujoco(self) -> None:
+    def step(self) -> None:
         if self.use_mujoco_dynamics:
             mj.mj_step(self.system_model, self.system_data)

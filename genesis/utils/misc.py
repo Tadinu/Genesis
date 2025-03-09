@@ -28,10 +28,16 @@ import quadrants as qd
 import genesis as gs
 from genesis.typing import is_sequence
 
-
 LOGGER = logging.getLogger(__name__)
 
 
+
+
+def print_class(cls, all: bool = False):
+    if all:
+        print(dir(cls))
+    else:
+        print([func for func in dir(cls) if callable(getattr(cls, func)) and not func.startswith("__")])
 class DeprecationError(Exception):
     pass
 

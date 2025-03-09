@@ -9,11 +9,11 @@ from loop_rate_limiters import RateLimiter
 
 # Genesis
 import genesis as gs
-from genesis.controller import mink
+from genesis.controller import gink
 from genesis.options.morphs import Primitive
 from genesis.engine.entities.rigid_entity import RigidEntity, RigidLink
 from genesis.ext import trimesh
-from genesis.ext.trimesh.collision import CollisionManager
+from trimesh.collision import CollisionManager
 from genesis.controller import mjpc
 from genesis.controller.mjpc import predictive_sampling
 
@@ -73,13 +73,13 @@ class Iiwa14AllegroMpc:
 
         # Add fingertip-end bodies from sites (since Genesis does not build site info from MJ model)
         for fingertip in Iiwa14Allegro.HAND_FINGERTIP_NAMES:
-            fingertip_site = self.hand_spec.find_site(fingertip)
-            self.hand_spec.find_body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
-                                                         quat=fingertip_site.quat)
+            fingertip_site = self.hand_spec.site(fingertip)
+            self.hand_spec.body(fingertip).add_body(name=f"{fingertip}end", pos=fingertip_site.pos,
+                                                    quat=fingertip_site.quat)
 
         # Attach [hand_spec] to [arm_spec]
-        attach_site = self.arm_spec.find_site("attachment_site")
-        attach_site.attach(self.hand_spec, Iiwa14Allegro.ATTACH_PREFIX)
+        attach_site = self.arm_spec.site("attachment_site")
+        attach_site.attach_body(self.hand_spec.worldbody, Iiwa14Allegro.ATTACH_PREFIX)
 
         # TODO: Remove prev "home" key from arm_spec once MuJoCo releases [rem_key] API
         #self.arm_spec.add_key(name="home2", qpos=Iiwa14Allegro.HOME_QPOS)
@@ -110,7 +110,7 @@ class Iiwa14AllegroMpc:
         # 1.1 Control [ee_target]
         # TODO: Only If object is not grasped yet
         cube_pos = cube.get_pos().cpu().numpy()
-        mink.move_entity_to_frame(robot.ee_target,
+        gink.move_entity_to_frame(robot.ee_target,
                                   cube_pos + (0,0,0.3),
                                   #np.array([-0.462, 0, 0.887,0])) # ry: 235
                                   np.array([-0.259, 0, 0.966,0])) # ry: 210
@@ -126,7 +126,7 @@ class Iiwa14AllegroMpc:
         robot.update_tasks()
 
         # 2.2 Compute velocity and integrate into the next configuration.
-        vel = mink.solve_ik(robot.system,
+        vel = gink.solve_ik(robot.system,
                             robot.configuration, robot.tasks, self.rate.dt, self.solver_name, 1e-3, limits=robot.limits)
         robot.configuration.apply_ctrl(entity=robot.system,
                                        ctrl=vel, ctrl_type=gs.CTRL_MODE.VELOCITY)

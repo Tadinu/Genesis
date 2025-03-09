@@ -20,16 +20,16 @@ class ComTask(Task):
         target_com: Target position of the CoM.
     """
 
-    k: int = 3
     target_com: Optional[np.ndarray]
 
     def __init__(
         self,
+        name: str,
         cost: npt.ArrayLike,
         gain: float = 1.0,
         lm_damping: float = 0.0,
     ):
-        super().__init__(cost=np.zeros((self.k,)), gain=gain, lm_damping=lm_damping)
+        super().__init__(name, k=3, cost=np.zeros((self.k,)), gain=gain, lm_damping=lm_damping)
         self.target_com = None
 
         self.set_cost(cost)

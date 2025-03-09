@@ -105,7 +105,7 @@ class Configuration:
             Jacobian :math:`{}_B J_{WB}` of the frame.
         """
 
-        jac = entity.get_jacobian(link).cpu().numpy()
+        jac = np.squeeze(entity.get_jacobian(link).cpu().numpy())
 
         link_quat = link.get_quat().cpu().numpy()
         # Genesis jacobians have a frame of reference centered at the local frame but

@@ -218,7 +218,7 @@ def build_model(
                 mj.eq_solref[:, 0] = MIN_TIMECONST
     elif isinstance(xml, mujoco.MjModel):
         mj = xml
-        else:
+    else:
         gs.raise_exception(f"'{xml}' is not a valid MJCF or URDF file.")
 
     return mj
