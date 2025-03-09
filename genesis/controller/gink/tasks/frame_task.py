@@ -26,7 +26,6 @@ class FrameTask(Task):
         transform_frame_to_world: Target pose of the frame.
     """
 
-    k: int = 6
     transform_target_to_world: Optional[SE3]
 
     def __init__(
@@ -38,8 +37,10 @@ class FrameTask(Task):
         gain: float = 1.0,
         lm_damping: float = 0.0,
     ):
+        k=6
         super().__init__(name=f"FrameTask_{entity.name}_{frame.name}",
-                         cost=np.zeros((self.k,)), gain=gain, lm_damping=lm_damping)
+                         k=k,
+                         cost=np.zeros((k,)), gain=gain, lm_damping=lm_damping)
         self.entity = entity
         self.frame = frame
         self.position_cost = position_cost

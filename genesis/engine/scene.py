@@ -441,9 +441,8 @@ class Scene(RBC):
             # Rigid entities will convexify geom by default
             if morph.convexify is None:
                 morph.convexify = isinstance(material, (gs.materials.Rigid, gs.materials.Avatar))
-       entity = self._sim._add_entity(name, morph, material, surface, visualize_contact)
 
-
+        entity = self._sim._add_entity(name, morph, material, surface, visualize_contact)
         return entity
 
     @gs.assert_unbuilt
