@@ -64,7 +64,7 @@ def main():
             dofs_idx_local=np.arange(6),
         )
 
-    #target_quat = np.array([0, 1, 0, 0])  # pointing downwards
+    # target_quat = np.array([0, 1, 0, 0])  # pointing downwards
     center = np.array([0.4, -0.2, 0.25])
     r = 0.1
     ee_link = robot.links[0]

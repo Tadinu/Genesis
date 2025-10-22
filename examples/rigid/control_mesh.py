@@ -28,10 +28,13 @@ def main():
         show_viewer=args.vis,
     )
 
+    plane = scene.add_entity(gs.morphs.Plane())
     duck = scene.add_entity(
         morph=gs.morphs.Mesh(
-            file="meshes/duck.obj",
-            scale=0.1,
+            # file="meshes/duck.obj",
+            # scale=0.1,
+            file="urdf/cheezit/cheezit_box_open_thick.ply",
+            scale=0.01,
             pos=(0, 0, 0.0),
         ),
     )
@@ -47,6 +50,7 @@ def main():
 
     for i in range(1000):
         scene.step()
+        scene.clear_debug_objects()
 
 
 if __name__ == "__main__":
