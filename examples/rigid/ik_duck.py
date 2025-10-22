@@ -7,9 +7,8 @@ from genesis import quat_to_xyz, xyz_to_quat
 
 
 def main():
-
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--vis", action="store_true", default=False)
+    parser.add_argument("-v", "--vis", action="store_true", default=True)
     args = parser.parse_args()
 
     ########################## init ##########################
@@ -54,7 +53,7 @@ def main():
 
     ########################## build ##########################
     scene.build()
-    kinematics_mode = False
+    kinematics_mode = True
     if not kinematics_mode:
         # set positional gains
         robot.set_dofs_kp(
@@ -73,7 +72,7 @@ def main():
             dofs_idx_local=np.arange(6),
         )
 
-    #target_quat = np.array([0, 1, 0, 0])  # pointing downwards
+    # target_quat = np.array([0, 1, 0, 0])  # pointing downwards
     center = np.array([0.4, -0.2, 0.25])
     r = 0.1
     ee_link = robot.links[0]

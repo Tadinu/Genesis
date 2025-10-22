@@ -1,7 +1,6 @@
-
 from copy import copy
 from itertools import chain
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Optional
 import mujoco
 
 import gstaichi as ti
@@ -44,14 +43,14 @@ class RigidEntity(Entity):
     def __init__(
             self,
             scene: "Scene",
-        solver: "RigidSolver",
+            solver: "RigidSolver",
             material: Material,
             morph: Morph,
             surface: Surface,
             idx: int,
             idx_in_solver,
-        link_start: int = 0,
-        joint_start: int = 0,
+            link_start: int = 0,
+            joint_start: int = 0,
             q_start=0,
             dof_start=0,
             geom_start=0,
@@ -65,7 +64,7 @@ class RigidEntity(Entity):
             vvert_start=0,
             vface_start=0,
             equality_start=0,
-        visualize_contact: bool = False,
+            visualize_contact: bool = False,
     ):
         super().__init__(idx, scene, morph, solver, material, surface)
 
@@ -494,7 +493,8 @@ class RigidEntity(Entity):
         # Check if there is something weird with the options
         non_physical_fieldnames = ("dofs_frictionloss", "dofs_damping", "dofs_armature")
         for j_info in (
-            j_info for link_j_infos in links_j_infos for j_info in link_j_infos if j_info["type"] == gs.JOINT_TYPE.FREE
+                j_info for link_j_infos in links_j_infos for j_info in link_j_infos if
+        j_info["type"] == gs.JOINT_TYPE.FREE
         ):
             if not all((j_info[name] < gs.EPS).all() for name in non_physical_fieldnames if name in j_info):
                 gs.logger.warning(
@@ -919,14 +919,14 @@ class RigidEntity(Entity):
 
     @ti.func
     def _impl_get_jacobian(
-        self,
-        tgt_link_idx,
-        i_b,
-        p_vec,
-        dofs_info: array_class.DofsInfo,
-        joints_info: array_class.JointsInfo,
-        links_info: array_class.LinksInfo,
-        links_state: array_class.LinksState,
+            self,
+            tgt_link_idx,
+            i_b,
+            p_vec,
+            dofs_info: array_class.DofsInfo,
+            joints_info: array_class.JointsInfo,
+            links_info: array_class.LinksInfo,
+            links_state: array_class.LinksState,
     ):
         self._func_get_jacobian(
             tgt_link_idx=tgt_link_idx,
@@ -942,13 +942,13 @@ class RigidEntity(Entity):
 
     @ti.kernel
     def _kernel_get_jacobian(
-        self,
-        tgt_link_idx: ti.i32,
-        p_local: ti.types.ndarray(),
-        dofs_info: array_class.DofsInfo,
-        joints_info: array_class.JointsInfo,
-        links_info: array_class.LinksInfo,
-        links_state: array_class.LinksState,
+            self,
+            tgt_link_idx: ti.i32,
+            p_local: ti.types.ndarray(),
+            dofs_info: array_class.DofsInfo,
+            joints_info: array_class.JointsInfo,
+            links_info: array_class.LinksInfo,
+            links_state: array_class.LinksState,
     ):
         p_vec = ti.Vector([p_local[0], p_local[1], p_local[2]], dt=gs.ti_float)
         for i_b in range(self._solver._B):
@@ -964,12 +964,12 @@ class RigidEntity(Entity):
 
     @ti.kernel
     def _kernel_get_jacobian_zero(
-        self,
-        tgt_link_idx: ti.i32,
-        dofs_info: array_class.DofsInfo,
-        joints_info: array_class.JointsInfo,
-        links_info: array_class.LinksInfo,
-        links_state: array_class.LinksState,
+            self,
+            tgt_link_idx: ti.i32,
+            dofs_info: array_class.DofsInfo,
+            joints_info: array_class.JointsInfo,
+            links_info: array_class.LinksInfo,
+            links_state: array_class.LinksState,
     ):
         for i_b in range(self._solver._B):
             self._impl_get_jacobian(
@@ -984,16 +984,16 @@ class RigidEntity(Entity):
 
     @ti.func
     def _func_get_jacobian(
-        self,
-        tgt_link_idx,
-        i_b,
-        p_local,
-        pos_mask,
-        rot_mask,
-        dofs_info: array_class.DofsInfo,
-        joints_info: array_class.JointsInfo,
-        links_info: array_class.LinksInfo,
-        links_state: array_class.LinksState,
+            self,
+            tgt_link_idx,
+            i_b,
+            p_local,
+            pos_mask,
+            rot_mask,
+            dofs_info: array_class.DofsInfo,
+            joints_info: array_class.JointsInfo,
+            links_info: array_class.LinksInfo,
+            links_state: array_class.LinksState,
     ):
         for i_row, i_d in ti.ndrange(6, self.n_dofs):
             self._jacobian[i_row, i_d, i_b] = 0.0
@@ -1432,16 +1432,16 @@ class RigidEntity(Entity):
             qs_idx: ti.types.ndarray(),
             links_idx: ti.types.ndarray(),
             envs_idx: ti.types.ndarray(),
-        links_state: array_class.LinksState,
-        links_info: array_class.LinksInfo,
-        joints_state: array_class.JointsState,
-        joints_info: array_class.JointsInfo,
-        dofs_state: array_class.DofsState,
-        dofs_info: array_class.DofsInfo,
-        entities_info: array_class.EntitiesInfo,
-        rigid_global_info: array_class.RigidGlobalInfo,
-        static_rigid_sim_config: ti.template(),
-        static_rigid_sim_cache_key: array_class.StaticRigidSimCacheKey,
+            links_state: array_class.LinksState,
+            links_info: array_class.LinksInfo,
+            joints_state: array_class.JointsState,
+            joints_info: array_class.JointsInfo,
+            dofs_state: array_class.DofsState,
+            dofs_info: array_class.DofsInfo,
+            entities_info: array_class.EntitiesInfo,
+            rigid_global_info: array_class.RigidGlobalInfo,
+            static_rigid_sim_config: ti.template(),
+            static_rigid_sim_cache_key: array_class.StaticRigidSimCacheKey,
     ):
         ti.loop_config(serialize=static_rigid_sim_config.para_level < gs.PARA_LEVEL.ALL)
         for i_q_, i_b_ in ti.ndrange(qs_idx.shape[0], envs_idx.shape[0]):
@@ -1496,23 +1496,23 @@ class RigidEntity(Entity):
     # ------------------------------------------------------------------------------------
     @gs.assert_built
     def plan_path(
-        self,
-        qpos_goal,
-        qpos_start=None,
-        max_nodes=2000,
-        resolution=0.05,
-        timeout=None,
-        max_retry=1,
-        smooth_path=True,
-        num_waypoints=300,
-        ignore_collision=False,
-        planner="RRTConnect",
-        envs_idx=None,
-        return_valid_mask=False,
-        *,
-        ee_link_name=None,
-        with_entity=None,
-        **kwargs,
+            self,
+            qpos_goal,
+            qpos_start=None,
+            max_nodes=2000,
+            resolution=0.05,
+            timeout=None,
+            max_retry=1,
+            smooth_path=True,
+            num_waypoints=300,
+            ignore_collision=False,
+            planner="RRTConnect",
+            envs_idx=None,
+            return_valid_mask=False,
+            *,
+            ee_link_name=None,
+            with_entity=None,
+            **kwargs,
     ):
         """
         Plan a path from `qpos_start` to `qpos_goal`.
@@ -1758,12 +1758,12 @@ class RigidEntity(Entity):
 
     @gs.assert_built
     def get_links_pos(
-        self,
-        links_idx_local=None,
-        envs_idx=None,
-        *,
-        ref: Literal["link_origin", "link_com", "root_com"] = "link_origin",
-        unsafe=False,
+            self,
+            links_idx_local=None,
+            envs_idx=None,
+            *,
+            ref: Literal["link_origin", "link_com", "root_com"] = "link_origin",
+            unsafe=False,
     ):
         """
         Returns the position of a given reference point for all the entity's links.
@@ -3035,10 +3035,10 @@ class RigidEntity(Entity):
 
 @ti.kernel
 def _kernel_get_free_verts(
-    tensor: ti.types.ndarray(),
-    free_verts_idx_local: ti.types.ndarray(),
-    verts_state_start: ti.i32,
-    free_verts_state: array_class.VertsState,
+        tensor: ti.types.ndarray(),
+        free_verts_idx_local: ti.types.ndarray(),
+        verts_state_start: ti.i32,
+        free_verts_state: array_class.VertsState,
 ):
     n_verts = free_verts_idx_local.shape[0]
     _B = tensor.shape[0]
@@ -3049,10 +3049,10 @@ def _kernel_get_free_verts(
 
 @ti.kernel
 def _kernel_get_fixed_verts(
-    tensor: ti.types.ndarray(),
-    fixed_verts_idx_local: ti.types.ndarray(),
-    verts_state_start: ti.i32,
-    fixed_verts_state: array_class.VertsState,
+        tensor: ti.types.ndarray(),
+        fixed_verts_idx_local: ti.types.ndarray(),
+        verts_state_start: ti.i32,
+        fixed_verts_state: array_class.VertsState,
 ):
     n_verts = fixed_verts_idx_local.shape[0]
     _B = tensor.shape[0]
