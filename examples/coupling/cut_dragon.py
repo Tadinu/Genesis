@@ -16,7 +16,7 @@ def main():
             substeps=10,
         ),
         mpm_options=gs.options.MPMOptions(
-            grid_density=64,
+            grid_density=16,
             enable_CPIC=True,
             lower_bound=(-1.0, -1.0, -0.01),
             upper_bound=(1.0, 1.0, 2.0),
@@ -30,6 +30,15 @@ def main():
             camera_fov=35,
         ),
         show_viewer=args.vis,
+    )
+
+    cam = scene.add_camera(
+        res=(1280, 960),
+        pos=(1.2, 0.9, 2.5),
+        lookat=(0.0, 0.0, 0.0),
+        fov=35,
+        GUI=not args.vis,
+        spp=128,
     )
 
     plane = scene.add_entity(
@@ -67,9 +76,18 @@ def main():
     )
     scene.build(n_envs=0)
 
-    horizon = 400 if "PYTEST_VERSION" not in os.environ else 5
-    for _ in range(horizon):
+    horizon = 3000 if "PYTEST_VERSION" not in os.environ else 5
+    ini_entities_num = len(scene.entities)
+    cam.start_recording()
+    for i in range(horizon):
+        print(i, len(scene.entities))
         scene.step()
+        cam.render()
+        if ini_entities_num < len(scene.entities):
+            break
+
+    # Save video
+    cam.stop_recording(save_to_filename='cut_dragon.mp4', fps=60)
 
 
 if __name__ == "__main__":
