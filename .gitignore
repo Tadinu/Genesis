@@ -1,3 +1,5 @@
+.conda_envs/
+CMakeBuild/
 logs/
 tmp/
 MUJOCO_LOG.TXT
