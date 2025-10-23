@@ -1,8 +1,5 @@
 import argparse
 import os
-import json
-
-from genesis.ext.LuisaRender.src.ext.assimp.port.PyAssimp.scripts.transformations import euler_from_matrix
 
 import numpy as np
 
@@ -14,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--solver", type=str, default="sph", choices=("sph", "mpm"))
     parser.add_argument("--recon", action="store_true", default=False)
-    parser.add_argument("-v", "--vis", action="store_true", default=False)
+    parser.add_argument("-v", "--vis", action="store_true", default=True)
     args = parser.parse_args()
 
     ########################## init ##########################
@@ -31,8 +28,9 @@ def main():
             gravity=(0, 0, -9.81),
         ),
         mpm_options=gs.options.MPMOptions(
-            lower_bound=(0.0, -1.5, 0.0),
-            upper_bound=(1.0, 1.5, 4.0),
+            lower_bound=(-2.5, -1.5, 0.0),
+            upper_bound=(3.5, 6.0, 5.0),
+            grid_density=32,
         ),
         sph_options=gs.options.SPHOptions(
             particle_size=0.02,
@@ -50,18 +48,6 @@ def main():
             rendered_envs_idx=[0],
         ),
         show_viewer=args.vis,
-        # renderer=gs.renderers.RayTracer(  # type: ignore
-        #     env_surface=gs.surfaces.Emission(
-        #         emissive_texture=gs.textures.ImageTexture(
-        #             image_path="textures/indoor_bright.png",
-        #         ),
-        #     ),
-        #     env_radius=15.0,
-        #     env_euler=(0, 0, 180),
-        #     lights=[
-        #         {"pos": (0.0, 0.0, 10.0), "radius": 3.0, "color": (15.0, 15.0, 15.0)},
-        #     ],
-        # ),
     )
 
     cam = scene.add_camera(
@@ -69,7 +55,7 @@ def main():
         pos=(0, 15, 6),
         lookat=(0, 4, 1),
         fov=35,
-        GUI=True,
+        GUI=False,
         spp=128,
     )
 
@@ -129,19 +115,14 @@ def main():
         material=gs.materials.Rigid(gravity_compensation=1)
     )
 
-    water = scene.add_emitter(
-        material=gs.materials.PBD.Liquid(
-            sampler="regular", rho=1000.0,
-            density_relaxation=0.2,
-            viscosity_relaxation=0.01,
-        ),
-        max_particles=1000000,
-        surface=gs.surfaces.Glass(
-            color=(0.71, 0.56, 0.45, 1),
-            vis_mode="recon" if args.recon else "particle",
+    sand = scene.add_emitter(
+        material=gs.materials.MPM.Sand(),
+        max_particles=10000,
+        surface=gs.surfaces.Rough(
+            color=(1.0, 0.9, 0.6, 1.0),
         ),
     )
-    scene.build()
+    scene.build(n_envs=2)
     ########################## Scene - end ##########################
 
     # Box dofs
@@ -191,24 +172,27 @@ def main():
             print(label)
 
         # Water (only start emitting from certain frame)
-        if i >= 100:
-            current_box_pose = cheezit_box.get_qpos().cpu().numpy()
+        if i >= 100 and i < 180:
+            current_box_pose = cheezit_box.get_qpos()[0, ...].cpu().numpy()
             rot_mat = quat_to_R(current_box_pose[3:])
-            emit_pos = np.dot(rot_mat, np.array([0, 0.5, 1.2])) + current_box_pose[:3]
-            emit_direction = np.array([0, 0, -1])
+            emit_pos = np.dot(rot_mat, np.array([0, 0.6, 1.1])) + current_box_pose[:3]
+            emit_direction = np.array([0.0, 0.0, -1.0])
+            print(emit_pos)
             # emit_direction = np.dot(rot_mat, emit_direction)
-            water.emit(
+            sand.emit(
                 pos=emit_pos,
                 direction=emit_direction,
-                speed=40.0,
+                speed=10.0,
                 droplet_shape="circle",
-                droplet_size=0.2 if i < 180 else 0,
+                droplet_size=0.1,
             )
 
         # Cheezit_box
         if i < poses_num:
             # print(cheezit_box_poses[i])
             pose = cheezit_box_poses[i]
+            pose = np.tile(pose, (2, 1))
+
             target_entity.set_qpos(pose)
             if kinematics_mode:
                 cheezit_box.set_qpos(pose)
@@ -243,6 +227,8 @@ def main():
 
 
 def load_poses(file_path):
+    import json
+
     with open(file_path, 'r') as f:
         data = json.load(f)
     rot_correction = np.array([-1, 0, 0, 0, 0, -1, 0, -1, 0]).reshape(3, 3)

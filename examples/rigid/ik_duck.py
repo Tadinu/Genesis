@@ -53,7 +53,7 @@ def main():
 
     ########################## build ##########################
     scene.build()
-    kinematics_mode = True
+    kinematics_mode = False
     if not kinematics_mode:
         # set positional gains
         robot.set_dofs_kp(
