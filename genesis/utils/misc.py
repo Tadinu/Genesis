@@ -24,6 +24,7 @@ import cpuinfo
 import numba as nb
 import psutil
 import pyglet
+import taichi as ti
 
 import quadrants as qd
 from quadrants.lang import kernel_impl
@@ -42,13 +43,12 @@ _WIN_STD_ERROR_HANDLE = -12
 _WIN_HANDLE_FLAG_PROTECT_FROM_CLOSE = 0x2
 
 
-
-
 def print_class(cls, all: bool = False):
     if all:
         print(dir(cls))
     else:
         print([func for func in dir(cls) if callable(getattr(cls, func)) and not func.startswith("__")])
+
 class DeprecationError(Exception):
     pass
 
@@ -271,9 +271,9 @@ def get_device(backend: gs.constants.backend, device_idx: int | None = None):
 
     if backend in (gs.cuda, gs.amdgpu):
         if (
-            not torch.cuda.is_available()
-            or (backend == gs.cuda and not torch.version.cuda)
-            or (backend == gs.amdgpu and not torch.version.hip)
+                not torch.cuda.is_available()
+                or (backend == gs.cuda and not torch.version.cuda)
+                or (backend == gs.amdgpu and not torch.version.hip)
         ):
             gs.raise_exception(f"Torch device 'cuda' not available for backend '{backend}'.")
         if device_idx is None:
@@ -281,7 +281,7 @@ def get_device(backend: gs.constants.backend, device_idx: int | None = None):
         device = torch.device("cuda", device_idx)
         device_property = torch.cuda.get_device_properties(device)
         device_name = device_property.name
-        total_mem = device_property.total_memory / 1024**3
+        total_mem = device_property.total_memory / 1024 ** 3
     elif backend == gs.metal:
         # on mac, cpu and gpu are in the same physical hardware and sharing memory
         device, device_name, total_mem, _ = get_device(gs.cpu)
@@ -294,7 +294,7 @@ def get_device(backend: gs.constants.backend, device_idx: int | None = None):
     else:
         cpu_info = cpuinfo.get_cpu_info()
         device_name = next(filter(None, map(cpu_info.get, ("brand_raw", "hardware_raw", "vendor_id_raw"))))
-        total_mem = psutil.virtual_memory().total / 1024**3
+        total_mem = psutil.virtual_memory().total / 1024 ** 3
         assert not device_idx, "Specifying device index other than 0 is not support for Torch CPU device."
         device = torch.device("cpu")
     return device, device_name, total_mem, backend
@@ -474,6 +474,7 @@ def tensor_to_cpu(x):
 def tensor_to_array(x: torch.Tensor, dtype: type[np.generic] | None = None) -> np.ndarray:
     return np.asarray(tensor_to_cpu(x), dtype=dtype)
 
+
 def tensor_inf_with_scalar(x, scalar):
     return torch.where(torch.isinf(x), torch.tensor(scalar, dtype=x.dtype, device=x.device), x)
 
@@ -608,7 +609,7 @@ def gaussian_crosstalk_kernel(n_rows: int, n_cols: int, sigma: float, spacing: f
 
 
 def concat_with_tensor(
-    tensor: torch.Tensor, value, expand: tuple[int, ...] | None = None, dim: int = 0, flatten: bool = False
+        tensor: torch.Tensor, value, expand: tuple[int, ...] | None = None, dim: int = 0, flatten: bool = False
 ):
     """Helper method to concatenate a value (not necessarily a tensor) with a tensor."""
     if not isinstance(value, torch.Tensor):
@@ -622,9 +623,9 @@ def concat_with_tensor(
     if flatten:
         value = value.flatten()
     assert (
-        0 <= dim < tensor.ndim
-        and tensor.ndim == value.ndim
-        and all(e_1 == e_2 for i, (e_1, e_2) in enumerate(zip(tensor.shape, value.shape)) if e_1 > 0 and i != dim)
+            0 <= dim < tensor.ndim
+            and tensor.ndim == value.ndim
+            and all(e_1 == e_2 for i, (e_1, e_2) in enumerate(zip(tensor.shape, value.shape)) if e_1 > 0 and i != dim)
     )
     if tensor.numel() == 0:
         # 'expand' leaves a zero stride on the broadcast dimensions, so materialize to get a real table supporting
@@ -847,6 +848,7 @@ def indices_to_mask(
 
     return tuple(mask)
 
+
 @ti.func
 def is_zero_array(v: ti.types.ndarray()) -> bool:
     res = True
@@ -897,13 +899,13 @@ def _apply_masks(out, value, row_mask, col_mask, keepdim, copy, *, to_torch):
 
 
 def qd_to_torch(
-    value: qd.Tensor | qd.Field | qd.Ndarray,
-    row_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
-    col_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
-    keepdim: bool = True,
-    transpose: bool = False,
-    *,
-    copy: bool | None = None,
+        value: qd.Tensor | qd.Field | qd.Ndarray,
+        row_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
+        col_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
+        keepdim: bool = True,
+        transpose: bool = False,
+        *,
+        copy: bool | None = None,
 ) -> torch.Tensor:
     """Converts a Quadrants field / ndarray instance to a PyTorch tensor.
 
@@ -969,13 +971,13 @@ def qd_to_torch(
 
 
 def qd_to_numpy(
-    value: qd.Tensor | qd.Field | qd.Ndarray,
-    row_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
-    col_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
-    keepdim: bool = True,
-    transpose: bool = False,
-    *,
-    copy: bool | None = None,
+        value: qd.Tensor | qd.Field | qd.Ndarray,
+        row_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
+        col_mask: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None = None,
+        keepdim: bool = True,
+        transpose: bool = False,
+        *,
+        copy: bool | None = None,
 ) -> np.ndarray:
     """Converts a Quadrants field / ndarray instance to a Numpy array.
 
@@ -1237,11 +1239,11 @@ def get_own_annotations(cls: type) -> dict[str, Any]:
 
 
 def sanitize_index(
-    index: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None,
-    expected_size: int,
-    max_size: int,
-    dim: int,
-    name: str,
+        index: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None,
+        expected_size: int,
+        max_size: int,
+        dim: int,
+        name: str,
 ) -> torch.Tensor:
     is_bool_mask = False
     is_negative_wrap_required = False
@@ -1367,10 +1369,10 @@ def drop_repeated_index(
 
 
 def sanitize_indices(
-    indices: Sequence[int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None],
-    expected_shape: Sequence[int],
-    max_shape: Sequence[int],
-    dim_names: tuple[str, ...] | list[str],
+        indices: Sequence[int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None],
+        expected_shape: Sequence[int],
+        max_shape: Sequence[int],
+        dim_names: tuple[str, ...] | list[str],
 ) -> tuple[torch.Tensor, ...]:
     indices_: list[torch.Tensor] = []
     expected_shape = list(expected_shape)
@@ -1382,10 +1384,10 @@ def sanitize_indices(
 
 
 def broadcast_tensor(
-    tensor: "np.typing.ArrayLike | None",
-    dtype: torch.dtype,
-    expected_shape: tuple[int, ...] | list[int],
-    dim_names: tuple[str, ...] | list[str] | None = None,
+        tensor: "np.typing.ArrayLike | None",
+        dtype: torch.dtype,
+        expected_shape: tuple[int, ...] | list[int],
+        dim_names: tuple[str, ...] | list[str] | None = None,
 ) -> torch.Tensor:
     if dim_names is None:
         dim_names = ("",) * len(expected_shape)
@@ -1410,7 +1412,7 @@ def broadcast_tensor(
     if tensor_ndim == 0:
         tensor_ = tensor_[None]
     elif tensor_ndim < expected_ndim and not all(
-        [d1 == d2 or d2 == -1 for d1, d2 in zip(tensor_shape, expected_shape[-tensor_ndim:])]
+            [d1 == d2 or d2 == -1 for d1, d2 in zip(tensor_shape, expected_shape[-tensor_ndim:])]
     ):
         # Try expanding first dimensions if priority
         for dims_valid in tuple(combinations(range(expected_ndim), tensor_ndim))[::-1]:
@@ -1455,19 +1457,19 @@ def broadcast_tensor(
 
 
 def sanitize_indexed_tensor(
-    tensor: "np.typing.ArrayLike | None",
-    dtype: torch.dtype,
-    indices: Sequence[int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None],
-    expected_shape: tuple[int, ...] | list[int],
-    max_shape: tuple[int, ...] | list[int],
-    dim_names: tuple[str, ...] | list[str],
-    skip_allocation: bool = False,
+        tensor: "np.typing.ArrayLike | None",
+        dtype: torch.dtype,
+        indices: Sequence[int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None],
+        expected_shape: tuple[int, ...] | list[int],
+        max_shape: tuple[int, ...] | list[int],
+        dim_names: tuple[str, ...] | list[str],
+        skip_allocation: bool = False,
 ) -> tuple[torch.Tensor | None, tuple[torch.Tensor, ...]]:
     indices_ = sanitize_indices(indices, expected_shape, max_shape, dim_names)
 
     is_preallocated = tensor is not None
     if is_preallocated or not skip_allocation:
-        expected_shape = [*map(len, indices_), *expected_shape[len(indices_) :]]
+        expected_shape = [*map(len, indices_), *expected_shape[len(indices_):]]
         tensor = broadcast_tensor(tensor, dtype, expected_shape, dim_names).contiguous()
 
     return tensor, tuple(indices_)
@@ -1481,7 +1483,7 @@ def get_indexed_shape(tensor_shape, indices):
     ellipsis_count = sum(1 for idx in indices if idx is Ellipsis)
     if ellipsis_count == 1:
         idx = indices.index(Ellipsis)
-        indices = (*indices[:idx], *(slice(None),) * (ndim - len(indices) + 1), *indices[idx + 1 :])
+        indices = (*indices[:idx], *(slice(None),) * (ndim - len(indices) + 1), *indices[idx + 1:])
     elif ellipsis_count > 1:
         raise IndexError("Only one ellipsis (...) is allowed")
 
@@ -1514,10 +1516,10 @@ def get_indexed_shape(tensor_shape, indices):
 
 
 def assign_indexed_tensor(
-    tensor: torch.Tensor,
-    indices: tuple[int | slice | torch.Tensor, ...],
-    value: "np.typing.ArrayLike",
-    dim_names: tuple[str, ...] | list[str] | None = None,
+        tensor: torch.Tensor,
+        indices: tuple[int | slice | torch.Tensor, ...],
+        value: "np.typing.ArrayLike",
+        dim_names: tuple[str, ...] | list[str] | None = None,
 ) -> None:
     if isinstance(tensor, np.ndarray):
         # See broadcast_tensor for arrays with negative strides
