@@ -30,14 +30,14 @@ class Entity(RBC):
     """
 
     def __init__(
-        self,
-        idx,
-        scene,
-        morph,
-        solver,
-        material,
-        surface,
-        name: str | None = None,
+            self,
+            idx,
+            scene,
+            morph,
+            solver,
+            material,
+            surface,
+            name: str | None = None,
     ):
         # An entity is created from one morph. A kind of entity built from several passes the primary one here.
         if not isinstance(morph, Morph):
@@ -72,14 +72,6 @@ class Entity(RBC):
     # ------------------------------------------------------------------------------------
     # ----------------------------------- properties -------------------------------------
     # ------------------------------------------------------------------------------------
-
-    @property
-    def name(self):
-        return self._name
-
-    @name.setter
-    def name(self, new_name):
-        self._name = new_name
 
     @property
     def uid(self):
@@ -145,6 +137,10 @@ class Entity(RBC):
             morph type and UID is returned.
         """
         return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
 
     @property
     def sensors(self) -> "gs.List[Sensor]":

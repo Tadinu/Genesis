@@ -176,24 +176,24 @@ class Scene(RBC):
     """
 
     def __init__(
-        self,
-        sim_options: SimOptions | None = None,
-        tool_options: ToolOptions | None = None,
-        rigid_options: RigidOptions | None = None,
-        kinematic_options: KinematicOptions | None = None,
-        mpm_options: MPMOptions | None = None,
-        sph_options: SPHOptions | None = None,
-        fem_options: FEMOptions | None = None,
-        sf_options: SFOptions | None = None,
-        pbd_options: PBDOptions | None = None,
-        coupler_options: BaseCouplerOptions | None = None,
-        vis_options: VisOptions | None = None,
-        viewer_options: ViewerOptions | None = None,
-        profiling_options: ProfilingOptions | None = None,
-        renderer: RendererOptions | None = None,
-        show_viewer: bool | None = None,
-        show_FPS: bool | None = None,  # deprecated, use Scene.options.profiling.show_FPS instead
-        options: SceneOptions | None = None,
+            self,
+            sim_options: SimOptions | None = None,
+            tool_options: ToolOptions | None = None,
+            rigid_options: RigidOptions | None = None,
+            kinematic_options: KinematicOptions | None = None,
+            mpm_options: MPMOptions | None = None,
+            sph_options: SPHOptions | None = None,
+            fem_options: FEMOptions | None = None,
+            sf_options: SFOptions | None = None,
+            pbd_options: PBDOptions | None = None,
+            coupler_options: BaseCouplerOptions | None = None,
+            vis_options: VisOptions | None = None,
+            viewer_options: ViewerOptions | None = None,
+            profiling_options: ProfilingOptions | None = None,
+            renderer: RendererOptions | None = None,
+            show_viewer: bool | None = None,
+            show_FPS: bool | None = None,  # deprecated, use Scene.options.profiling.show_FPS instead
+            options: SceneOptions | None = None,
     ):
         # Delay simulator import to allow specifying Quadrants array type at init
         from genesis.engine.simulator import Simulator
@@ -298,36 +298,37 @@ class Scene(RBC):
 
     @overload
     def add_entity(
-        self,
-        morph: Morph | Iterable[Morph],
-        material: None = ...,
-        surface: Surface | None = ...,
-        visualize_contact: bool = ...,
-        vis_mode: str | None = ...,
-        name: str | None = ...,
-    ) -> "RigidEntity": ...
+            self,
+            morph: Morph | Iterable[Morph],
+            material: None = ...,
+            surface: Surface | None = ...,
+            visualize_contact: bool = ...,
+            vis_mode: str | None = ...,
+            name: str | None = ...,
+    ) -> "RigidEntity":
+        ...
 
     @overload
     def add_entity(
-        self,
-        morph: Morph | Iterable[Morph],
-        material: Material[EntityT] = ...,
-        surface: Surface | None = ...,
-        visualize_contact: bool = ...,
-        vis_mode: str | None = ...,
-        name: str | None = ...,
-    ) -> EntityT: ...
+            self,
+            morph: Morph | Iterable[Morph],
+            material: Material[EntityT] = ...,
+            surface: Surface | None = ...,
+            visualize_contact: bool = ...,
+            vis_mode: str | None = ...,
+            name: str | None = ...,
+    ) -> EntityT:
+        ...
 
     @gs.assert_unbuilt
     def add_entity(
-        self,
-        morph: Morph | Iterable[Morph],
-        name: str = None,
-        material: Material | None = None,
-        surface: Surface | None = None,
-        visualize_contact: bool = False,
-        vis_mode: str | None = None,
-        name: str | None = None,
+            self,
+            morph: Morph | Iterable[Morph],
+            material: Material | None = None,
+            surface: Surface | None = None,
+            visualize_contact: bool = False,
+            vis_mode: str | None = None,
+            name: Optional[str] = None,
     ) -> "Entity":
         """
         Add an entity to the scene.
@@ -392,15 +393,15 @@ class Scene(RBC):
                 )
 
         elif isinstance(
-            material,
-            (
-                gs.materials.PBD.Liquid,
-                gs.materials.PBD.Particle,
-                gs.materials.MPM.Liquid,
-                gs.materials.MPM.Sand,
-                gs.materials.MPM.Snow,
-                gs.materials.SPH.Liquid,
-            ),
+                material,
+                (
+                        gs.materials.PBD.Liquid,
+                        gs.materials.PBD.Particle,
+                        gs.materials.MPM.Liquid,
+                        gs.materials.MPM.Sand,
+                        gs.materials.MPM.Snow,
+                        gs.materials.SPH.Liquid,
+                ),
         ):
             if surface.vis_mode is None:
                 surface.vis_mode = "particle"
@@ -450,18 +451,16 @@ class Scene(RBC):
             gs.raise_exception()
 
         entity = self._sim._add_entity(morph, material, surface, visualize_contact, name)
-
-        entity = self._sim._add_entity(name, morph, material, surface, visualize_contact)
         return entity
 
     @gs.assert_unbuilt
     def add_stage(
-        self,
-        morph: gs.morphs.USD,
-        material: Material | None = None,
-        surface: Surface | None = None,
-        visualize_contact: bool = False,
-        vis_mode: Literal["visual", "collision"] = "visual",
+            self,
+            morph: gs.morphs.USD,
+            material: Material | None = None,
+            surface: Surface | None = None,
+            visualize_contact: bool = False,
+            vis_mode: Literal["visual", "collision"] = "visual",
     ):
         """
         Add a stage to the scene.
@@ -499,13 +498,13 @@ class Scene(RBC):
 
     @gs.assert_unbuilt
     def add_mesh_light(
-        self,
-        morph: Morph | None = None,
-        color: "np.typing.ArrayLike | None" = (1.0, 1.0, 1.0, 1.0),
-        intensity: float = 20.0,
-        revert_dir: bool | None = False,
-        double_sided: bool | None = False,
-        cutoff: float | None = 180.0,
+            self,
+            morph: Morph | None = None,
+            color: "np.typing.ArrayLike | None" = (1.0, 1.0, 1.0, 1.0),
+            intensity: float = 20.0,
+            revert_dir: bool | None = False,
+            double_sided: bool | None = False,
+            cutoff: float | None = 180.0,
     ):
         """
         Add a mesh light to the scene. Only supported by RayTracer.
@@ -540,15 +539,15 @@ class Scene(RBC):
 
     @gs.assert_unbuilt
     def add_light(
-        self,
-        pos: "np.typing.ArrayLike | None",
-        dir: "np.typing.ArrayLike | None",
-        color: "np.typing.ArrayLike | None" = (1.0, 1.0, 1.0),
-        intensity: float = 1.0,
-        directional: bool = False,
-        castshadow: bool = True,
-        cutoff: float = 45.0,
-        attenuation: float = 0.0,
+            self,
+            pos: "np.typing.ArrayLike | None",
+            dir: "np.typing.ArrayLike | None",
+            color: "np.typing.ArrayLike | None" = (1.0, 1.0, 1.0),
+            intensity: float = 1.0,
+            directional: bool = False,
+            castshadow: bool = True,
+            cutoff: float = 45.0,
+            attenuation: float = 0.0,
     ):
         """
         Add a light to the scene for batch renderer.
@@ -664,22 +663,22 @@ class Scene(RBC):
 
     @gs.assert_unbuilt
     def add_camera(
-        self,
-        model="pinhole",
-        res=(320, 320),
-        pos=(0.5, 2.5, 3.5),
-        lookat=(0.5, 0.5, 0.5),
-        up=(0.0, 0.0, 1.0),
-        fov=30,
-        aperture=2.0,
-        focus_dist=None,
-        GUI=False,
-        spp=256,
-        denoise=None,
-        near=0.1,
-        far=20.0,
-        env_idx=None,
-        debug=False,
+            self,
+            model="pinhole",
+            res=(320, 320),
+            pos=(0.5, 2.5, 3.5),
+            lookat=(0.5, 0.5, 0.5),
+            up=(0.0, 0.0, 1.0),
+            fov=30,
+            aperture=2.0,
+            focus_dist=None,
+            GUI=False,
+            spp=256,
+            denoise=None,
+            near=0.1,
+            far=20.0,
+            env_idx=None,
+            debug=False,
     ):
         """
         Add a camera to the scene.
@@ -753,10 +752,10 @@ class Scene(RBC):
 
     @gs.assert_unbuilt
     def add_emitter(
-        self,
-        material: Material,
-        max_particles=20000,
-        surface: Surface | None = None,
+            self,
+            material: Material,
+            max_particles=20000,
+            surface: Surface | None = None,
     ):
         """
         Add a fluid emitter to the scene.
@@ -783,7 +782,8 @@ class Scene(RBC):
             gs.raise_exception("Emitter is not supported in differentiable mode.")
 
         if not isinstance(
-            material, (gs.materials.MPM.Base, gs.materials.SPH.Base, gs.materials.PBD.Particle, gs.materials.PBD.Liquid)
+                material,
+                (gs.materials.MPM.Base, gs.materials.SPH.Base, gs.materials.PBD.Particle, gs.materials.PBD.Liquid)
         ):
             gs.raise_exception(
                 "Non-supported material for emitter. Supported materials are: `gs.materials.MPM.Base`, "
@@ -829,11 +829,11 @@ class Scene(RBC):
 
     @gs.assert_unbuilt
     def build(
-        self,
-        n_envs=0,
-        env_spacing=(0.0, 0.0),
-        n_envs_per_row: int | None = None,
-        center_envs_at_origin=True,
+            self,
+            n_envs=0,
+            env_spacing=(0.0, 0.0),
+            n_envs_per_row: int | None = None,
+            center_envs_at_origin=True,
     ):
         """
         Builds the scene once all entities have been added. This operation is required before running the simulation.
@@ -891,11 +891,11 @@ class Scene(RBC):
         self._recorder_manager.build()
 
     def _parallelize(
-        self,
-        n_envs: int,
-        env_spacing: tuple[float, float],
-        n_envs_per_row: int,
-        center_envs_at_origin: bool,
+            self,
+            n_envs: int,
+            env_spacing: tuple[float, float],
+            n_envs_per_row: int,
+            center_envs_at_origin: bool,
     ):
         self.n_envs = n_envs
         self.env_spacing = env_spacing
@@ -1267,11 +1267,11 @@ class Scene(RBC):
 
     @gs.assert_built
     def draw_debug_box(
-        self,
-        bounds,
-        color=(1.0, 0.0, 0.0, 1.0),
-        wireframe=True,
-        wireframe_radius=0.0015,
+            self,
+            bounds,
+            color=(1.0, 0.0, 0.0, 1.0),
+            wireframe=True,
+            wireframe_radius=0.0015,
     ):
         """
         Draws a box in the scene for visualization.
@@ -1417,14 +1417,14 @@ class Scene(RBC):
 
     @gs.assert_built
     def render_all_cameras(
-        self,
-        rgb=True,
-        depth=False,
-        segmentation=False,
-        colorize_seg=False,
-        normal=False,
-        antialiasing=False,
-        force_render=False,
+            self,
+            rgb=True,
+            depth=False,
+            segmentation=False,
+            colorize_seg=False,
+            normal=False,
+            antialiasing=False,
+            force_render=False,
     ):
         """
         Render the scene for all cameras using the batch renderer.
@@ -1808,7 +1808,7 @@ class Scene(RBC):
         self._restart()
 
     def _sanitize_envs_idx(
-        self, envs_idx: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None
+            self, envs_idx: int | range | slice | tuple[int, ...] | list[int] | torch.Tensor | np.ndarray | None
     ) -> torch.Tensor:
         if envs_idx is None:
             return self._envs_idx
@@ -1830,7 +1830,7 @@ class Scene(RBC):
                 gs.raise_exception(f"`envs_idx` out of range: {envs_idx} not in [{-n_envs}, {n_envs}).")
             if envs_idx < 0:
                 envs_idx = envs_idx + n_envs
-            return self._envs_idx[envs_idx : envs_idx + 1]
+            return self._envs_idx[envs_idx: envs_idx + 1]
 
         return sanitize_index(envs_idx, -1, self.n_envs, 0, "envs_idx")
 

@@ -8,7 +8,7 @@ rigid object / MPM object / FEM object.
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal, Optional
 from typing_extensions import Self
 
 import mujoco
@@ -643,11 +643,11 @@ class FileMorph(Morph):
         return data
 
     def __init__(
-        self,
-        *,
-        decompose_nonconvex: bool | None = None,
-        parse_glb_with_zup: bool | None = None,
-        **kwargs,
+            self,
+            *,
+            decompose_nonconvex: bool | None = None,
+            parse_glb_with_zup: bool | None = None,
+            **kwargs,
     ):
         if decompose_nonconvex is not None:
             gs.logger.warning(
@@ -1021,6 +1021,7 @@ class MJCF(FileMorph):
 class MuJoCoMorph(MJCF):
     xml: Optional[str] = None
     model: Optional[Any] = None
+
     def __init__(self, **data):
         super().__init__(**data)
         if not self.model:
@@ -1030,7 +1031,8 @@ class MuJoCoMorph(MJCF):
                 gs.raise_exception(f"Expected `.xml` extension for file: {self.file}")
 
             self.model = mujoco.MjModel.from_xml_path(self.file) if self.file else \
-                         mujoco.MjModel.from_xml_string(self.xml)
+                mujoco.MjModel.from_xml_string(self.xml)
+
 
 class URDF(FileMorph):
     """
@@ -1299,11 +1301,11 @@ class Drone(FileMorph):
     default_base_ang_damping_scale: float | None = 1e-5
 
     def __init__(
-        self,
-        *,
-        COM_link_name: str | None = None,
-        propellers_link_names: tuple[str, ...] | None = None,
-        **data,
+            self,
+            *,
+            COM_link_name: str | None = None,
+            propellers_link_names: tuple[str, ...] | None = None,
+            **data,
     ):
         if COM_link_name is not None:
             gs.logger.warning("'COM_link_name' is deprecated. The true Center of Mass will be used instead.")
@@ -1474,7 +1476,7 @@ class Terrain(Morph):
                     )
 
         if not mu.is_approx_multiple(self.subterrain_size[0], self.horizontal_scale) or not mu.is_approx_multiple(
-            self.subterrain_size[1], self.horizontal_scale
+                self.subterrain_size[1], self.horizontal_scale
         ):
             gs.raise_exception("`subterrain_size` should be divisible by `horizontal_scale`.")
 

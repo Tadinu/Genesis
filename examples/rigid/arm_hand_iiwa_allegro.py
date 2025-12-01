@@ -146,7 +146,7 @@ class Iiwa14Allegro(BaseSystem):
         self.tasks = [self.ee_task, self.posture_task]
         self.tasks.extend(self.finger_tasks.values())
 
-    def _config_limits(self):
+    def _config_gink_limits(self):
         # Joint limits
         self.limits = [
             gink.ConfigurationLimit(entity=self.system, model=self.system_model),
@@ -217,10 +217,10 @@ class Iiwa14Allegro(BaseSystem):
         ))
 
     def update_tasks(self):
-        self._update_task_ee()
+        self._update_task_ees()
         self._update_task_fingers()
 
-    def _update_task_ee(self):
+    def _update_task_ees(self):
         # Update kuka end-effector task, as [target]'s SE3
         T_wt = gink.SE3.from_entity(self.ee_target)
         self.ee_task.set_target(T_wt)
