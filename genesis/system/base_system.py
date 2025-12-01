@@ -11,6 +11,7 @@ from trimesh.collision import CollisionManager
 
 _HERE = Path(__file__).parent
 
+
 class BaseSystem(abc.ABC):
     IDENTITY_WXYZ = np.array([1., 0., 0., 0.])
     ZERO_XYZ = np.zeros(3)
@@ -27,7 +28,7 @@ class BaseSystem(abc.ABC):
                  use_mujoco_dynamics: bool = False):
         self.scene = scene
         self.system_model: mj.MjModel = system_model
-        self.system_spec: mj.MjSpec = system_spec # containing pre-compiled model metadata, more easily accessible
+        self.system_spec: mj.MjSpec = system_spec  # containing pre-compiled model metadata, more easily accessible
         self.system_data: mj.MjData = mj.MjData(system_model) if use_mujoco_dynamics else None
         self.use_mujoco_dynamics: bool = use_mujoco_dynamics
         self.configuration: gink.Configuration = None
@@ -40,8 +41,10 @@ class BaseSystem(abc.ABC):
 
         # Get the dof and actuator ids for the active joints to be controlled
         self.N_DOFS: int = len(joint_names) if joint_names else 0
-        self.dof_ids: Optional[np.ndarray] = np.array([system_model.joint(name).id for name in joint_names]) if joint_names else None
-        self.actuator_ids: Optional[np.ndarray] = np.array([system_model.actuator(name).id for name in joint_names]) if joint_names else None
+        self.dof_ids: Optional[np.ndarray] = np.array(
+            [system_model.joint(name).id for name in joint_names]) if joint_names else None
+        self.actuator_ids: Optional[np.ndarray] = np.array(
+            [system_model.actuator(name).id for name in joint_names]) if joint_names else None
 
         # System
         self.system = self.scene.add_entity(name=system_name,
@@ -74,7 +77,7 @@ class BaseSystem(abc.ABC):
         self._config_tasks()
 
         # Limits (position/velocity, joints, collision, etc.)
-        self._config_limits()
+        self._config_gink_limits()
 
     @abc.abstractmethod
     def _config_control(self) -> None:
@@ -83,7 +86,7 @@ class BaseSystem(abc.ABC):
     def _config_tasks(self) -> None:
         pass
 
-    def _config_limits(self) -> None:
+    def _config_gink_limits(self) -> None:
         # Joint limits
         self.limits = [
             gink.ConfigurationLimit(entity=self.system, model=self.system_model)
